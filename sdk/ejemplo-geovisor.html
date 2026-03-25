@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Geovisor Ejemplo - CTGlobal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol/ol.css" />
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #map { width: 100%; height: 100vh; }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- OpenLayers -->
+  <script src="https://cdn.jsdelivr.net/npm/ol/dist/ol.js"></script>
+
+  <!-- CTGlobal SDK — SOLO AÑADIR ESTO A TU GEOVISOR EXISTENTE -->
+  <script src="../../sdk/ctglobal-sdk.js"></script>
+
+  <script>
+    // ── 1. Inicializar el SDK ──────────────────────────────────
+    const ctg = new CTGlobalSDK({
+      projectKey: 'GV-001',
+      apiKey: 'ctg_live_dos_quebradas_xxxxxx',   // la que genera la intranet
+      apiUrl: 'https://intranet.ctglobal.com.co/api',
+      loginTitle: 'Geovisor Dosquebradas',
+    });
+
+    // ── 2. Proteger el geovisor ───────────────────────────────
+    // requireAuth() bloquea la página con login hasta que el usuario se autentique
+    ctg.requireAuth().then((user) => {
+      console.log("✅ Usuario autenticado:", user.nombre);
+
+      // ── 3. Tu código OpenLayers IGUAL QUE SIEMPRE ─────────
+      const capaBase = new ol.layer.Tile({
+        source: new ol.source.OSM(),
+        title: "OpenStreetMap",
+      });
+
+      const capaPredios = new ol.layer.Tile({
+        source: new ol.source.TileWMS({
+          url: 'http://200.7.107.14:8080/geoserver/dos_quebradas/wms',
+          params: {
+            'LAYERS': 'dos_quebradas:predios',
+            'TILED': true,
+          },
+        }),
+        title: "Predios",
+        name: "predios",          // ← SDK usa este campo para los logs
+        visible: false,
+      });
+
+      const capaEstratificacion = new ol.layer.Tile({
+        source: new ol.source.TileWMS({
+          url: 'http://200.7.107.14:8080/geoserver/dos_quebradas/wms',
+          params: {
+            'LAYERS': 'dos_quebradas:estratificacion',
+            'TILED': true,
+          },
+        }),
+        title: "Estratificación",
+        name: "estratificacion",  // ← SDK usa este campo para los logs
+        visible: false,
+      });
+
+      const map = new ol.Map({
+        target: 'map',
+        layers: [capaBase, capaPredios, capaEstratificacion],
+        view: new ol.View({
+          center: ol.proj.fromLonLat([-75.69, 4.84]),
+          zoom: 13,
+        }),
+      });
+
+      // ── 4. Conectar SDK con el mapa (tracking automático) ──
+      // Esto registra automáticamente cuando el usuario activa capas
+      ctg.trackOpenLayersMap(map);
+
+      // ── 5. Botón de logout ─────────────────────────────────
+      ctg.addLogoutButton("map");
+
+      // ── 6. Log manual (opcional) ───────────────────────────
+      // Si tienes controles personalizados para capas:
+      document.getElementById("btn-predios")?.addEventListener("click", () => {
+        const visible = !capaPredios.getVisible();
+        capaPredios.setVisible(visible);
+        if (visible) ctg.logLayer("predios", "Predios");
+      });
+    });
+  </script>
+</body>
+</html>

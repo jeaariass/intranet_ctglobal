@@ -1,0 +1,38 @@
+# Dependencias
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+
+# Entorno
+.env
+.env.local
+.env.production
+
+# Base de datos
+backend/data/
+
+# Uploads
+backend/uploads/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker
+.docker/
+
+# PM2
+.pm2/

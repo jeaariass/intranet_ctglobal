@@ -1,0 +1,381 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int            @id @default(autoincrement())
+  nombre         String
+  apellido       String
+  email          String         @unique
+  password       String
+  cargo          String         @default("")
+  area           String         @default("")
+  telefono       String         @default("")
+  avatar         String         @default("")
+  rol            UserRol        @default(EMPLEADO)
+  activo         Boolean        @default(true)
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  announcements  Announcement[]
+  documents      Document[]
+  equipment_logs EquipmentLog[]
+  events         Event[]
+  invoices       invoices[]
+  project_users  ProjectUser[]
+  wiki_pages     WikiPage[]
+  wiki_revisions WikiRevision[]
+
+  @@index([activo])
+  @@index([email])
+  @@map("users")
+}
+
+model Announcement {
+  id         Int              @id @default(autoincrement())
+  titulo     String
+  contenido  String
+  tipo       AnnouncementTipo @default(GENERAL)
+  prioridad  Prioridad        @default(NORMAL)
+  activo     Boolean          @default(true)
+  autor_id   Int?
+  created_at DateTime         @default(now()) @db.Timestamptz(6)
+  users      User?            @relation(fields: [autor_id], references: [id], onUpdate: NoAction)
+
+  @@index([activo])
+  @@index([created_at(sort: Desc)], map: "announcements_created_idx")
+  @@map("announcements")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model Document {
+  id            Int               @id @default(autoincrement())
+  nombre        String
+  descripcion   String            @default("")
+  categoria     DocumentCategoria @default(GENERAL)
+  proyecto_id   Int?
+  archivo       String
+  tamano        Int               @default(0)
+  subido_por_id Int?
+  created_at    DateTime          @default(now()) @db.Timestamptz(6)
+  geo_projects  GeoProject?       @relation(fields: [proyecto_id], references: [id], onUpdate: NoAction)
+  users         User?             @relation(fields: [subido_por_id], references: [id], onUpdate: NoAction)
+
+  @@index([categoria])
+  @@index([created_at(sort: Desc)], map: "documents_created_idx")
+  @@index([proyecto_id], map: "documents_proyecto_idx")
+  @@map("documents")
+}
+
+model Event {
+  id            Int         @id @default(autoincrement())
+  titulo        String
+  descripcion   String      @default("")
+  fecha_inicio  DateTime    @db.Timestamptz(6)
+  fecha_fin     DateTime?   @db.Timestamptz(6)
+  tipo          EventTipo   @default(REUNION)
+  proyecto_id   Int?
+  creado_por_id Int?
+  created_at    DateTime    @default(now()) @db.Timestamptz(6)
+  users         User?       @relation(fields: [creado_por_id], references: [id], onUpdate: NoAction)
+  geo_projects  GeoProject? @relation(fields: [proyecto_id], references: [id], onUpdate: NoAction)
+
+  @@index([fecha_inicio], map: "events_fecha_idx")
+  @@index([proyecto_id], map: "events_proyecto_idx")
+  @@map("events")
+}
+
+model WikiCategory {
+  id         Int        @id @default(autoincrement())
+  nombre     String
+  slug       String     @unique
+  icono      String     @default("📄")
+  orden      Int        @default(0)
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  wiki_pages WikiPage[]
+
+  @@map("wiki_categories")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model WikiPage {
+  id              Int            @id @default(autoincrement())
+  titulo          String
+  slug            String         @unique
+  contenido       String         @default("")
+  categoria_id    Int?
+  autor_id        Int?
+  publicado       Boolean        @default(true)
+  revision        Int            @default(1)
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime       @default(now()) @db.Timestamptz(6)
+  users           User?          @relation(fields: [autor_id], references: [id], onUpdate: NoAction)
+  wiki_categories WikiCategory?  @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
+  wiki_revisions  WikiRevision[]
+
+  @@index([categoria_id], map: "wiki_pages_categoria_idx")
+  @@index([publicado])
+  @@index([updated_at(sort: Desc)], map: "wiki_pages_updated_idx")
+  @@map("wiki_pages")
+}
+
+model WikiRevision {
+  id         Int      @id @default(autoincrement())
+  page_id    Int
+  contenido  String
+  revision   Int
+  autor_id   Int?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      User?    @relation(fields: [autor_id], references: [id], onUpdate: NoAction)
+  wiki_pages WikiPage @relation(fields: [page_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([page_id], map: "wiki_revisions_page_idx")
+  @@index([page_id, revision(sort: Desc)], map: "wiki_revisions_revision_idx")
+  @@map("wiki_revisions")
+}
+
+model Equipment {
+  id                    Int             @id @default(autoincrement())
+  nombre                String
+  tipo                  EquipmentTipo
+  marca                 String          @default("")
+  modelo                String          @default("")
+  serial                String          @default("")
+  estado                EquipmentEstado @default(DISPONIBLE)
+  descripcion           String          @default("")
+  ubicacion             String          @default("")
+  fecha_compra          DateTime?       @db.Date
+  valor_compra          Decimal?        @db.Decimal(14, 2)
+  proximo_mantenimiento DateTime?       @db.Date
+  proyecto_actual_id    Int?
+  created_at            DateTime        @default(now()) @db.Timestamptz(6)
+  geo_projects          GeoProject?     @relation(fields: [proyecto_actual_id], references: [id], onUpdate: NoAction)
+  equipment_logs        EquipmentLog[]
+  invoices              invoices[]
+
+  @@index([estado])
+  @@index([proyecto_actual_id], map: "equipment_proyecto_idx")
+  @@index([tipo])
+  @@map("equipment")
+}
+
+model EquipmentLog {
+  id           Int         @id @default(autoincrement())
+  equipo_id    Int
+  proyecto_id  Int?
+  usuario_id   Int?
+  accion       String
+  notas        String      @default("")
+  fecha_inicio DateTime    @default(now()) @db.Timestamptz(6)
+  fecha_fin    DateTime?   @db.Timestamptz(6)
+  equipment    Equipment   @relation(fields: [equipo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  geo_projects GeoProject? @relation(fields: [proyecto_id], references: [id], onUpdate: NoAction)
+  users        User?       @relation(fields: [usuario_id], references: [id], onUpdate: NoAction)
+
+  @@index([equipo_id], map: "equipment_logs_equipo_idx")
+  @@index([fecha_inicio(sort: Desc)], map: "equipment_logs_fecha_idx")
+  @@index([proyecto_id], map: "equipment_logs_proyecto_idx")
+  @@map("equipment_logs")
+}
+
+model GeoProject {
+  id                  Int            @id @default(autoincrement())
+  nombre              String
+  slug                String         @unique
+  codigo              String         @unique
+  descripcion         String         @default("")
+  cliente             String         @default("")
+  url                 String         @default("")
+  geoserver_url       String         @default("")
+  geoserver_workspace String         @default("")
+  api_key             String         @unique
+  activo              Boolean        @default(true)
+  fecha_inicio        DateTime?      @db.Date
+  fecha_fin           DateTime?      @db.Date
+  created_at          DateTime       @default(now()) @db.Timestamptz(6)
+  documents           Document[]
+  equipment           Equipment[]
+  equipment_logs      EquipmentLog[]
+  events              Event[]
+  geo_sessions        GeoSession[]
+  project_users       ProjectUser[]
+
+  @@index([activo])
+  @@index([api_key])
+  @@index([fecha_fin])
+  @@map("geo_projects")
+}
+
+model ProjectUser {
+  id           Int          @id @default(autoincrement())
+  user_id      Int?
+  email        String
+  nombre       String
+  password     String
+  proyecto_id  Int
+  rol          ProjectRol   @default(VIEWER)
+  activo       Boolean      @default(true)
+  expires_at   DateTime?    @db.Timestamptz(6)
+  created_at   DateTime     @default(now()) @db.Timestamptz(6)
+  geo_sessions GeoSession[]
+  geo_projects GeoProject   @relation(fields: [proyecto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        User?        @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+
+  @@unique([email, proyecto_id], map: "project_users_email_proyecto_key")
+  @@index([activo])
+  @@index([email])
+  @@index([proyecto_id], map: "project_users_proyecto_idx")
+  @@map("project_users")
+}
+
+model GeoSession {
+  id              Int         @id @default(autoincrement())
+  project_user_id Int
+  proyecto_id     Int
+  ip              String      @default("")
+  user_agent      String      @default("")
+  started_at      DateTime    @default(now()) @db.Timestamptz(6)
+  ended_at        DateTime?   @db.Timestamptz(6)
+  duracion_seg    Int?
+  project_users   ProjectUser @relation(fields: [project_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  geo_projects    GeoProject  @relation(fields: [proyecto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  layer_views     LayerView[]
+
+  @@index([proyecto_id], map: "geo_sessions_proyecto_idx")
+  @@index([started_at(sort: Desc)], map: "geo_sessions_started_idx")
+  @@index([project_user_id], map: "geo_sessions_user_idx")
+  @@map("geo_sessions")
+}
+
+model LayerView {
+  id           Int        @id @default(autoincrement())
+  session_id   Int
+  layer_name   String
+  layer_title  String     @default("")
+  viewed_at    DateTime   @default(now()) @db.Timestamptz(6)
+  geo_sessions GeoSession @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([layer_name], map: "layer_views_layer_idx")
+  @@index([session_id], map: "layer_views_session_idx")
+  @@index([viewed_at(sort: Desc)], map: "layer_views_viewed_idx")
+  @@map("layer_views")
+}
+
+model migrations {
+  id           Int      @id @default(dbgenerated("nextval('_migrations_id_seq'::regclass)"))
+  nombre       String   @unique
+  ejecutado_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("_migrations")
+}
+
+model invoices {
+  id                Int           @id @default(autoincrement())
+  concepto          String
+  tipo              InvoiceTipo   @default(OTRO)
+  estado            InvoiceEstado @default(PENDIENTE)
+  proveedor         String        @default("")
+  monto             Decimal       @db.Decimal(14, 2)
+  moneda            String        @default("COP")
+  fecha_emision     DateTime      @db.Date
+  fecha_vencimiento DateTime?     @db.Date
+  periodo_mes       Int?
+  periodo_anio      Int?
+  equipo_id         Int?
+  archivo_pdf       String?       @default("")
+  notas             String?       @default("")
+  registrado_por_id Int?
+  created_at        DateTime      @default(now()) @db.Timestamptz(6)
+  equipment         Equipment?    @relation(fields: [equipo_id], references: [id], onUpdate: NoAction)
+  users             User?         @relation(fields: [registrado_por_id], references: [id], onUpdate: NoAction)
+
+  @@index([equipo_id], map: "invoices_equipo_idx")
+  @@index([estado])
+  @@index([periodo_anio, periodo_mes], map: "invoices_periodo_idx")
+  @@index([tipo])
+  @@index([fecha_vencimiento], map: "invoices_vencimiento_idx")
+}
+
+enum UserRol {
+  ADMIN
+  EDITOR
+  EMPLEADO
+}
+
+enum AnnouncementTipo {
+  GENERAL
+  COMUNICADO
+  EVENTO
+  URGENTE
+}
+
+enum Prioridad {
+  NORMAL
+  ALTA
+}
+
+enum DocumentCategoria {
+  GENERAL
+  CONTRATO
+  INFORME
+  CARTOGRAFIA
+  NORMATIVA
+  PROPUESTA
+  RRHH
+  LEGAL
+  CONTABILIDAD
+  PROCEDIMIENTO
+  FORMATO
+}
+
+enum EventTipo {
+  REUNION
+  CAPACITACION
+  FESTIVO
+  ENTREGA
+  VENCIMIENTO
+  LICITACION
+  OTRO
+}
+
+enum EquipmentTipo {
+  DRONE
+  GPS
+  LAPTOP
+  CAMARA
+  SERVIDOR
+  LICENCIA
+  VEHICULO
+  OTRO
+}
+
+enum EquipmentEstado {
+  DISPONIBLE
+  EN_CAMPO
+  EN_MANTENIMIENTO
+  DANADO
+  DADO_DE_BAJA
+}
+
+enum ProjectRol {
+  VIEWER
+  EDITOR
+}
+
+enum InvoiceEstado {
+  PENDIENTE
+  PAGADO
+  VENCIDO
+  CANCELADO
+}
+
+enum InvoiceTipo {
+  COMPRA
+  SERVICIO_MENSUAL
+  SERVICIO_ANUAL
+  MANTENIMIENTO
+  OTRO
+}
