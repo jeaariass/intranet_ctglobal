@@ -110,9 +110,17 @@ function formatMonto(monto, moneda) {
   return `$${n.toLocaleString("es-CO", { maximumFractionDigits: 0 })}`;
 }
 
+function formatMontoDoble(inv) {
+  const principal = formatMonto(inv.monto, inv.moneda);
+  if (!inv.monto_secundario) return principal;
+  return `${principal} + ${formatMonto(inv.monto_secundario, inv.moneda_secundaria)}`;
+}
+
 const emptyForm = {
   concepto:"", tipo:"SERVICIO_MENSUAL", estado:"PENDIENTE", proveedor:"",
-  monto:"", moneda:"COP", fecha_emision:"", fecha_vencimiento:"",
+  monto:"", moneda:"COP",
+  monto_secundario:"", moneda_secundaria:"",
+  fecha_emision:"", fecha_vencimiento:"",
   periodo_mes:"", periodo_anio: new Date().getFullYear().toString(),
   equipo_id:"", notas:"",
 };
@@ -175,18 +183,20 @@ export default function Invoices() {
   const openEdit = (inv) => {
     setEditing(inv.id);
     setForm({
-      concepto:          inv.concepto,
-      tipo:              inv.tipo,
-      estado:            inv.estado,
-      proveedor:         inv.proveedor || "",
-      monto:             inv.monto,
-      moneda:            inv.moneda,
-      fecha_emision:     inv.fecha_emision?.split("T")[0] || "",
-      fecha_vencimiento: inv.fecha_vencimiento?.split("T")[0] || "",
-      periodo_mes:       inv.periodo_mes  || "",
-      periodo_anio:      inv.periodo_anio || "",
-      equipo_id:         inv.equipo_id   || "",
-      notas:             inv.notas        || "",
+      concepto:           inv.concepto,
+      tipo:               inv.tipo,
+      estado:             inv.estado,
+      proveedor:          inv.proveedor || "",
+      monto:              inv.monto,
+      moneda:             inv.moneda,
+      monto_secundario:   inv.monto_secundario  || "",
+      moneda_secundaria:  inv.moneda_secundaria || "",
+      fecha_emision:      inv.fecha_emision?.split("T")[0] || "",
+      fecha_vencimiento:  inv.fecha_vencimiento?.split("T")[0] || "",
+      periodo_mes:        inv.periodo_mes  || "",
+      periodo_anio:       inv.periodo_anio || "",
+      equipo_id:          inv.equipo_id   || "",
+      notas:              inv.notas        || "",
     });
     setFile(null);
     setShowModal(true);
@@ -275,34 +285,114 @@ export default function Invoices() {
 
       {/* Resumen del mes */}
       {summary && (
-        <div className="stats-grid" style={{ marginBottom:"1.5rem" }}>
-          <div className="stat-card">
-            <div className="stat-icon green"><CheckCircle size={17} strokeWidth={1.75} /></div>
-            <div>
-              <div className="stat-value" style={{ fontSize:"1.2rem" }}>
-                {formatMonto(summary.pagados.total, "COP")}
+        <div style={{ marginBottom:"1.5rem" }}>
+          {/* Fila 1: estado del mes */}
+          <div className="stats-grid" style={{ marginBottom:"0.75rem" }}>
+            {/* Pagado COP */}
+            <div className="stat-card">
+              <div className="stat-icon green"><CheckCircle size={17} strokeWidth={1.75} /></div>
+              <div>
+                <div style={{ fontSize:"0.65rem", color:"var(--text-muted)", fontWeight:600,
+                  textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>
+                  Pagado este mes
+                </div>
+                <div style={{ fontWeight:700, fontSize:"0.95rem", color:"var(--text)" }}>
+                  ${(+summary.pagados.total_cop).toLocaleString("es-CO", { maximumFractionDigits:0 })} COP
+                </div>
+                {summary.pagados.total_usd > 0 && (
+                  <div style={{ fontWeight:600, fontSize:"0.82rem", color:"#1d4ed8", marginTop:2 }}>
+                    USD {(+summary.pagados.total_usd).toLocaleString("es-CO", { minimumFractionDigits:2 })}
+                  </div>
+                )}
+                <div className="stat-label">{summary.pagados.count} factura(s)</div>
               </div>
-              <div className="stat-label">Pagado este mes ({summary.pagados.count})</div>
+            </div>
+
+            {/* Pendiente COP */}
+            <div className="stat-card">
+              <div className="stat-icon yellow"><Clock size={17} strokeWidth={1.75} /></div>
+              <div>
+                <div style={{ fontSize:"0.65rem", color:"var(--text-muted)", fontWeight:600,
+                  textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>
+                  Pendiente este mes
+                </div>
+                <div style={{ fontWeight:700, fontSize:"0.95rem", color:"var(--text)" }}>
+                  ${(+summary.pendientes.total_cop).toLocaleString("es-CO", { maximumFractionDigits:0 })} COP
+                </div>
+                {summary.pendientes.total_usd > 0 && (
+                  <div style={{ fontWeight:600, fontSize:"0.82rem", color:"#1d4ed8", marginTop:2 }}>
+                    USD {(+summary.pendientes.total_usd).toLocaleString("es-CO", { minimumFractionDigits:2 })}
+                  </div>
+                )}
+                <div className="stat-label">{summary.pendientes.count} factura(s)</div>
+              </div>
+            </div>
+
+            {/* Vencidas */}
+            <div className="stat-card">
+              <div className="stat-icon red"><XCircle size={17} strokeWidth={1.75} /></div>
+              <div>
+                <div style={{ fontSize:"0.65rem", color:"var(--text-muted)", fontWeight:600,
+                  textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>
+                  Vencidas sin pagar
+                </div>
+                <div style={{ fontWeight:700, fontSize:"1.6rem", letterSpacing:"-0.03em",
+                  color: summary.vencidos.count > 0 ? "var(--danger)" : "var(--text)" }}>
+                  {summary.vencidos.count}
+                </div>
+                <div className="stat-label">facturas</div>
+              </div>
             </div>
           </div>
-          <div className="stat-card">
-            <div className="stat-icon yellow"><Clock size={17} strokeWidth={1.75} /></div>
-            <div>
-              <div className="stat-value" style={{ fontSize:"1.2rem" }}>
-                {formatMonto(summary.pendientes.total, "COP")}
+
+          {/* Fila 2: total acumulado del año separado por moneda */}
+          {summary.historico && (
+            <div style={{
+              display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem",
+            }}>
+              {/* Total COP año */}
+              <div style={{
+                background:"#f0fdf4", border:"1px solid #bbf7d0",
+                borderRadius:"var(--radius-sm)", padding:"0.75rem 1rem",
+                display:"flex", alignItems:"center", gap:"0.75rem",
+              }}>
+                <div style={{ fontSize:"1.4rem" }}>🇨🇴</div>
+                <div>
+                  <div style={{ fontSize:"0.65rem", color:"#166534", fontWeight:600,
+                    textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                    Total COP pagado {summary.anio}
+                  </div>
+                  <div style={{ fontWeight:700, fontSize:"1rem", color:"#166534" }}>
+                    ${summary.historico.cop
+                      .filter(r => +r.periodo_anio === summary.anio)
+                      .reduce((a, r) => a + +r.total_cop, 0)
+                      .toLocaleString("es-CO", { maximumFractionDigits:0 })} COP
+                  </div>
+                </div>
               </div>
-              <div className="stat-label">Pendiente este mes ({summary.pendientes.count})</div>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon red"><XCircle size={17} strokeWidth={1.75} /></div>
-            <div>
-              <div className="stat-value" style={{ fontSize:"1.2rem" }}>
-                {summary.vencidos.count}
+
+              {/* Total USD año */}
+              <div style={{
+                background:"#eff6ff", border:"1px solid #bfdbfe",
+                borderRadius:"var(--radius-sm)", padding:"0.75rem 1rem",
+                display:"flex", alignItems:"center", gap:"0.75rem",
+              }}>
+                <div style={{ fontSize:"1.4rem" }}>🇺🇸</div>
+                <div>
+                  <div style={{ fontSize:"0.65rem", color:"#1e40af", fontWeight:600,
+                    textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                    Total USD pagado {summary.anio}
+                  </div>
+                  <div style={{ fontWeight:700, fontSize:"1rem", color:"#1e40af" }}>
+                    USD {summary.historico.usd
+                      .filter(r => +r.periodo_anio === summary.anio)
+                      .reduce((a, r) => a + +r.total_usd, 0)
+                      .toLocaleString("es-CO", { minimumFractionDigits:2 })}
+                  </div>
+                </div>
               </div>
-              <div className="stat-label">Facturas vencidas sin pagar</div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -396,7 +486,12 @@ export default function Invoices() {
                           : format(new Date(inv.fecha_emision), "d MMM yyyy", { locale:es })}
                       </td>
                       <td style={{ fontWeight:700, fontSize:"0.88rem" }}>
-                        {formatMonto(inv.monto, inv.moneda)}
+                        {formatMontoDoble(inv)}
+                        {inv.monto_secundario && (
+                          <div style={{ fontSize:"0.7rem", color:"var(--text-muted)", fontWeight:400, marginTop:1 }}>
+                            {formatMonto(inv.monto, inv.moneda)} + {formatMonto(inv.monto_secundario, inv.moneda_secundaria)}
+                          </div>
+                        )}
                       </td>
                       <td style={{ fontSize:"0.82rem", color: vencida && inv.estado==="PENDIENTE" ? "var(--danger)" : "inherit" }}>
                         {inv.fecha_vencimiento
@@ -533,6 +628,42 @@ export default function Invoices() {
                       <option value="EUR">EUR — Euro</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Cobro secundario (moneda diferente) */}
+                <div style={{
+                  background:"var(--primary-50)", border:"1px solid var(--primary-100)",
+                  borderRadius:"var(--radius-sm)", padding:"0.75rem 1rem", marginBottom:"0.875rem",
+                }}>
+                  <div style={{ fontSize:"0.75rem", fontWeight:600, color:"var(--primary)",
+                    marginBottom:"0.5rem" }}>
+                    Cobro adicional en otra moneda (opcional)
+                  </div>
+                  <div className="form-grid" style={{ marginBottom:0 }}>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label className="form-label">Monto adicional</label>
+                      <input type="number" step="0.01" min="0"
+                        value={form.monto_secundario}
+                        onChange={e => setForm({ ...form, monto_secundario: e.target.value })}
+                        placeholder="Ej: 36097" />
+                    </div>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label className="form-label">Moneda adicional</label>
+                      <select value={form.moneda_secundaria}
+                        onChange={e => setForm({ ...form, moneda_secundaria: e.target.value })}>
+                        <option value="">— Sin cobro adicional —</option>
+                        <option value="COP">COP — Peso colombiano</option>
+                        <option value="USD">USD — Dólar</option>
+                        <option value="EUR">EUR — Euro</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:"0.7rem", color:"var(--text-muted)", marginTop:"0.4rem" }}>
+                    Útil para servicios como Claude Max: $90 USD + $36.097 COP (IVA o cargo local)
+                  </div>
+                </div>
+
+                <div className="form-grid">
                   {/* Equipo (opcional) */}
                   <div className="form-group">
                     <label className="form-label">Equipo (opcional)</label>

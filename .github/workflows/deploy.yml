@@ -1,8 +1,6 @@
 name: 🚀 Deploy Intranet CTGlobal
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -33,17 +31,24 @@ jobs:
           npm ci --ignore-scripts
 
       - name: ✅ Verificar sintaxis backend
-        run: |
-          cd backend
-          node --check src/server.js
-          node --check src/models/database.js
-          node --check src/middleware/auth.js
-          node --check src/routes/auth.js
-          node --check src/routes/users.js
-          node --check src/routes/announcements.js
-          node --check src/routes/documents.js
-          node --check src/routes/events.js
-          echo "✅ Backend: sintaxis OK"
+              run: |
+                cd backend
+                node --check src/server.js
+                node --check src/lib/prisma.js
+                node --check src/middleware/auth.js
+                node --check src/routes/auth.js
+                node --check src/routes/users.js
+                node --check src/routes/announcements.js
+                node --check src/routes/documents.js
+                node --check src/routes/events.js
+                node --check src/routes/wiki.js
+                node --check src/routes/equipment.js
+                node --check src/routes/geoprojects.js
+                node --check src/routes/geoauth.js
+                node --check src/routes/sessions.js
+                node --check src/routes/reports.js
+                node --check src/routes/invoices.js
+                echo "✅ Backend: sintaxis OK"
 
       - name: 📦 Instalar dependencias frontend
         run: |

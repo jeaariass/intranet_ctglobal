@@ -1,6 +1,6 @@
 // backend/src/routes/invoices.js
 // Usa pg directo porque los enums nuevos (InvoiceTipo, InvoiceEstado)
-// a veces no quedan bien en el cliente Prisma generado por db pull.
+// no quedan bien en el cliente Prisma generado por db pull.
 
 const router  = require("express").Router();
 const multer  = require("multer");
@@ -32,7 +32,6 @@ const upload = multer({
   },
 });
 
-// ── Helper query ──────────────────────────────────────────────
 async function q(text, params = []) {
   const { rows } = await pool.query(text, params);
   return rows;
@@ -46,11 +45,11 @@ router.get("/", authMiddleware, async (req, res, next) => {
     const vals  = [];
     let   i     = 1;
 
-    if (tipo)     { conds.push(`i.tipo = $${i++}`);          vals.push(tipo); }
-    if (estado)   { conds.push(`i.estado = $${i++}`);        vals.push(estado); }
-    if (equipoId) { conds.push(`i.equipo_id = $${i++}`);     vals.push(+equipoId); }
-    if (anio)     { conds.push(`i.periodo_anio = $${i++}`);  vals.push(+anio); }
-    if (mes)      { conds.push(`i.periodo_mes = $${i++}`);   vals.push(+mes); }
+    if (tipo)     { conds.push(`i.tipo = $${i++}`);         vals.push(tipo); }
+    if (estado)   { conds.push(`i.estado = $${i++}`);       vals.push(estado); }
+    if (equipoId) { conds.push(`i.equipo_id = $${i++}`);    vals.push(+equipoId); }
+    if (anio)     { conds.push(`i.periodo_anio = $${i++}`); vals.push(+anio); }
+    if (mes)      { conds.push(`i.periodo_mes = $${i++}`);  vals.push(+mes); }
 
     const rows = await q(`
       SELECT i.*,
@@ -63,12 +62,11 @@ router.get("/", authMiddleware, async (req, res, next) => {
       WHERE ${conds.join(" AND ")}
       ORDER BY i.fecha_emision DESC, i.id DESC
     `, vals);
-
     res.json(rows);
   } catch (e) { next(e); }
 });
 
-// GET /api/invoices/alerts — por vencer en 5 días
+// GET /api/invoices/alerts
 router.get("/alerts", authMiddleware, async (req, res, next) => {
   try {
     const rows = await q(`
@@ -92,22 +90,76 @@ router.get("/summary", authMiddleware, async (req, res, next) => {
     const mes  = now.getMonth() + 1;
     const anio = now.getFullYear();
 
-    const [pagados, pendientes, vencidos] = await Promise.all([
-      q(`SELECT COALESCE(SUM(monto),0) AS total, COUNT(*) AS count
-         FROM invoices WHERE estado='PAGADO' AND periodo_mes=$1 AND periodo_anio=$2`,
+    // Suma COP = monto donde moneda=COP + monto_secundario donde moneda_secundaria=COP
+    // Suma USD = monto donde moneda=USD + monto_secundario donde moneda_secundaria=USD
+    const [estadosMes, totalesCop, totalesUsd, vencidos] = await Promise.all([
+      // Conteo y total bruto por estado (para tarjetas de resumen)
+      q(`SELECT estado,
+           COUNT(*)                                            AS count,
+           COALESCE(SUM(
+             CASE WHEN moneda='COP' THEN monto ELSE 0 END +
+             CASE WHEN moneda_secundaria='COP' THEN COALESCE(monto_secundario,0) ELSE 0 END
+           ),0)                                               AS total_cop,
+           COALESCE(SUM(
+             CASE WHEN moneda='USD' THEN monto ELSE 0 END +
+             CASE WHEN moneda_secundaria='USD' THEN COALESCE(monto_secundario,0) ELSE 0 END
+           ),0)                                               AS total_usd
+         FROM invoices
+         WHERE periodo_mes=$1 AND periodo_anio=$2
+         GROUP BY estado`,
         [mes, anio]),
-      q(`SELECT COALESCE(SUM(monto),0) AS total, COUNT(*) AS count
-         FROM invoices WHERE estado='PENDIENTE' AND periodo_mes=$1 AND periodo_anio=$2`,
-        [mes, anio]),
-      q(`SELECT COALESCE(SUM(monto),0) AS total, COUNT(*) AS count
-         FROM invoices WHERE estado='VENCIDO'`),
+
+      // Total COP histórico por mes (para gráfico tendencia)
+      q(`SELECT periodo_mes, periodo_anio,
+           COALESCE(SUM(
+             CASE WHEN moneda='COP' THEN monto ELSE 0 END +
+             CASE WHEN moneda_secundaria='COP' THEN COALESCE(monto_secundario,0) ELSE 0 END
+           ),0) AS total_cop
+         FROM invoices
+         WHERE estado='PAGADO'
+           AND periodo_anio IN ($1, $2)
+         GROUP BY periodo_anio, periodo_mes
+         ORDER BY periodo_anio, periodo_mes`,
+        [anio - 1, anio]),
+
+      // Total USD histórico por mes
+      q(`SELECT periodo_mes, periodo_anio,
+           COALESCE(SUM(
+             CASE WHEN moneda='USD' THEN monto ELSE 0 END +
+             CASE WHEN moneda_secundaria='USD' THEN COALESCE(monto_secundario,0) ELSE 0 END
+           ),0) AS total_usd
+         FROM invoices
+         WHERE estado='PAGADO'
+           AND periodo_anio IN ($1, $2)
+         GROUP BY periodo_anio, periodo_mes
+         ORDER BY periodo_anio, periodo_mes`,
+        [anio - 1, anio]),
+
+      // Facturas vencidas sin pagar
+      q(`SELECT COUNT(*) AS count FROM invoices WHERE estado='VENCIDO'`),
     ]);
+
+    // Construir mapa por estado del mes actual
+    const byEstado = {};
+    for (const r of estadosMes) {
+      byEstado[r.estado] = {
+        count:     +r.count,
+        total_cop: +r.total_cop,
+        total_usd: +r.total_usd,
+      };
+    }
+
+    const get = (estado) => byEstado[estado] || { count:0, total_cop:0, total_usd:0 };
 
     res.json({
       mes, anio,
-      pagados:    { total: +pagados[0].total,    count: +pagados[0].count },
-      pendientes: { total: +pendientes[0].total, count: +pendientes[0].count },
-      vencidos:   { total: +vencidos[0].total,   count: +vencidos[0].count },
+      pagados:    get("PAGADO"),
+      pendientes: get("PENDIENTE"),
+      vencidos:   { count: +vencidos[0].count, total_cop: 0, total_usd: 0 },
+      historico: {
+        cop: totalesCop,
+        usd: totalesUsd,
+      },
     });
   } catch (e) { next(e); }
 });
@@ -136,9 +188,10 @@ router.post("/", authMiddleware, editorMiddleware,
       const rows = await q(`
         INSERT INTO invoices
           (concepto, tipo, estado, proveedor, monto, moneda,
+           monto_secundario, moneda_secundaria,
            fecha_emision, fecha_vencimiento, periodo_mes, periodo_anio,
            equipo_id, archivo_pdf, notas, registrado_por_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
         RETURNING *
       `, [
         d.concepto,
@@ -147,6 +200,8 @@ router.post("/", authMiddleware, editorMiddleware,
         d.proveedor         || "",
         parseFloat(d.monto),
         d.moneda            || "COP",
+        d.monto_secundario  ? parseFloat(d.monto_secundario)  : null,
+        d.moneda_secundaria || null,
         d.fecha_emision,
         d.fecha_vencimiento || null,
         d.periodo_mes       ? +d.periodo_mes  : null,
@@ -181,15 +236,20 @@ router.put("/:id", authMiddleware, editorMiddleware,
 
       const rows = await q(`
         UPDATE invoices SET
-          concepto=$1, tipo=$2, estado=$3, proveedor=$4, monto=$5, moneda=$6,
-          fecha_emision=$7, fecha_vencimiento=$8, periodo_mes=$9, periodo_anio=$10,
-          equipo_id=$11, notas=$12
-          ${pdf ? ", archivo_pdf=$14" : ""}
-        WHERE id=$13
+          concepto=$1, tipo=$2, estado=$3, proveedor=$4,
+          monto=$5, moneda=$6,
+          monto_secundario=$7, moneda_secundaria=$8,
+          fecha_emision=$9, fecha_vencimiento=$10,
+          periodo_mes=$11, periodo_anio=$12,
+          equipo_id=$13, notas=$14
+          ${pdf ? ", archivo_pdf=$16" : ""}
+        WHERE id=$15
         RETURNING *
       `, [
         d.concepto, d.tipo, d.estado, d.proveedor || "",
         parseFloat(d.monto), d.moneda || "COP",
+        d.monto_secundario  ? parseFloat(d.monto_secundario)  : null,
+        d.moneda_secundaria || null,
         d.fecha_emision,
         d.fecha_vencimiento || null,
         d.periodo_mes  ? +d.periodo_mes  : null,

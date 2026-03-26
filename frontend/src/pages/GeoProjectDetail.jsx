@@ -164,7 +164,7 @@ export default function GeoProjectDetail() {
                       Sin usuarios asignados
                     </td></tr>
                   ) : project.projectUsers.map(pu => {
-                    const expired = pu.expiresAt && new Date(pu.expiresAt) < new Date();
+                    const expired = pu.expires_at && new Date(pu.expires_at) < new Date();
                     return (
                       <tr key={pu.id}>
                         <td>
@@ -173,9 +173,9 @@ export default function GeoProjectDetail() {
                         </td>
                         <td><span className={`badge ${pu.rol==="EDITOR"?"badge-blue":"badge-gray"}`}>{pu.rol}</span></td>
                         <td style={{ fontSize:"0.82rem" }}>
-                          {pu.expiresAt ? (
+                          {pu.expires_at ? (
                             <span style={{ color: expired ? "var(--danger)" : "inherit" }}>
-                              {format(new Date(pu.expiresAt), "d MMM yyyy", { locale:es })}
+                              {format(new Date(pu.expires_at), "d MMM yyyy", { locale:es })}
                               {expired && " ⚠️"}
                             </span>
                           ) : "Sin límite"}

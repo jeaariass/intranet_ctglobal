@@ -91,9 +91,38 @@ function InvoiceModal({ equipo, onClose }) {
   const MESES = ["","Ene","Feb","Mar","Abr","May","Jun",
                  "Jul","Ago","Sep","Oct","Nov","Dic"];
 
-  const total = invoices
-    .filter(i => i.estado === "PAGADO")
-    .reduce((a, i) => a + parseFloat(i.monto), 0);
+  // Totales separados por moneda — solo muestra los que tienen valor
+  const pagadas = invoices.filter(i => i.estado === "PAGADO");
+
+  const totalCOP = pagadas.reduce((a, i) => {
+    let t = 0;
+    if (i.moneda === "COP") t += parseFloat(i.monto) || 0;
+    if (i.moneda_secundaria === "COP") t += parseFloat(i.monto_secundario) || 0;
+    return a + t;
+  }, 0);
+
+  const totalUSD = pagadas.reduce((a, i) => {
+    let t = 0;
+    if (i.moneda === "USD") t += parseFloat(i.monto) || 0;
+    if (i.moneda_secundaria === "USD") t += parseFloat(i.monto_secundario) || 0;
+    return a + t;
+  }, 0);
+
+  // Formatea un monto según su moneda
+  const fmt = (monto, moneda) => {
+    const n = parseFloat(monto) || 0;
+    if (moneda === "USD") return `USD ${n.toLocaleString("es-CO", { minimumFractionDigits:2 })}`;
+    return `$${n.toLocaleString("es-CO", { maximumFractionDigits:0 })} COP`;
+  };
+
+  // Muestra el monto principal + secundario solo si existe y es distinto
+  const fmtFila = (inv) => {
+    const principal = fmt(inv.monto, inv.moneda);
+    if (!inv.monto_secundario || !inv.moneda_secundaria) return principal;
+    // Si el monto principal es 0, mostrar solo el secundario
+    if (parseFloat(inv.monto) === 0) return fmt(inv.monto_secundario, inv.moneda_secundaria);
+    return `${principal} + ${fmt(inv.monto_secundario, inv.moneda_secundaria)}`;
+  };
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -125,11 +154,20 @@ function InvoiceModal({ equipo, onClose }) {
             </div>
           ) : (
             <>
-              {total > 0 && (
+              {(totalCOP > 0 || totalUSD > 0) && (
                 <div style={{ padding:"0.75rem 1.25rem", background:"var(--primary-50)",
                   borderBottom:"1px solid var(--border)", fontSize:"0.82rem",
-                  color:"var(--primary)", fontWeight:600 }}>
-                  Total pagado: ${total.toLocaleString("es-CO", { maximumFractionDigits:0 })} COP
+                  color:"var(--primary)", fontWeight:600,
+                  display:"flex", gap:"1.5rem", flexWrap:"wrap" }}>
+                  <span>Total pagado:</span>
+                  {totalCOP > 0 && (
+                    <span>${totalCOP.toLocaleString("es-CO", { maximumFractionDigits:0 })} COP</span>
+                  )}
+                  {totalUSD > 0 && (
+                    <span style={{ color:"#1d4ed8" }}>
+                      USD {totalUSD.toLocaleString("es-CO", { minimumFractionDigits:2 })}
+                    </span>
+                  )}
                 </div>
               )}
               <table>
@@ -154,10 +192,7 @@ function InvoiceModal({ equipo, onClose }) {
                           : format(new Date(inv.fecha_emision), "d MMM yyyy", { locale:es })}
                       </td>
                       <td style={{ fontWeight:700, fontSize:"0.85rem" }}>
-                        ${parseFloat(inv.monto).toLocaleString("es-CO", { maximumFractionDigits:0 })}
-                        <span style={{ fontSize:"0.68rem", color:"var(--text-muted)", marginLeft:3 }}>
-                          {inv.moneda}
-                        </span>
+                        {fmtFila(inv)}
                       </td>
                       <td>
                         <span className={`badge ${

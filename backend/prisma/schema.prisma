@@ -289,6 +289,8 @@ model invoices {
   notas             String?       @default("")
   registrado_por_id Int?
   created_at        DateTime      @default(now()) @db.Timestamptz(6)
+  monto_secundario  Decimal?      @db.Decimal(14, 2)
+  moneda_secundaria String?
   equipment         Equipment?    @relation(fields: [equipo_id], references: [id], onUpdate: NoAction)
   users             User?         @relation(fields: [registrado_por_id], references: [id], onUpdate: NoAction)
 

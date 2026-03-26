@@ -46,9 +46,10 @@ router.get("/:id", authMiddleware, async (req, res, next) => {
     });
     if (!p) return res.status(404).json({ error: "Proyecto no encontrado" });
 
-    const { _count, ...rest } = p;
+    const { _count, project_users, ...rest } = p;
     res.json({
       ...rest,
+      projectUsers: project_users,
       _count: { sessions: _count.geo_sessions, projectUsers: _count.project_users },
     });
   } catch (e) { next(e); }
