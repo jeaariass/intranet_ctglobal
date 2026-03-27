@@ -22,7 +22,7 @@ app.use((req, res, next) => {
 
 // ── Rate limiting ─────────────────────────────────────────────
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 10,
+  windowMs: 1 * 60 * 1000, max: 20,
   message: { error: "Demasiados intentos. Espera 15 minutos." },
 });
 const apiLimiter = rateLimit({

@@ -364,6 +364,7 @@ enum EquipmentEstado {
 
 enum ProjectRol {
   VIEWER
+  FUNCIONARIO
   EDITOR
 }
 
