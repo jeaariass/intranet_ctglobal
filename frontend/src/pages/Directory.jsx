@@ -98,8 +98,8 @@ export default function Directory() {
                 )}
               </div>
               <div style={{ marginTop: "0.5rem" }}>
-                <span className={`badge ${u.rol === "admin" ? "badge-red" : "badge-gray"}`}>
-                  {u.rol === "admin" ? "Admin" : "Colaborador"}
+                <span className={`badge ${u.rol === "ADMIN" ? "badge-red" : "badge-gray"}`}>
+                  {u.rol === "ADMIN" ? "Admin" : "Colaborador"}
                 </span>
               </div>
             </div>

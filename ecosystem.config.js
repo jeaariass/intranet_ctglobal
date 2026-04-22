@@ -10,11 +10,11 @@ module.exports = {
       max_memory_restart: "256M",
       env: {
         NODE_ENV: "production",
-        PORT: 3001,
+        PORT: 4000,
       },
       env_production: {
         NODE_ENV: "production",
-        PORT: 3001,
+        PORT: 4000,
       },
       error_file: "/var/log/pm2/intranet-ctglobal-error.log",
       out_file: "/var/log/pm2/intranet-ctglobal-out.log",

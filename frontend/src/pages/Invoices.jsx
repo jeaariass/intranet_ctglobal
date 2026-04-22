@@ -147,8 +147,7 @@ export default function Invoices() {
   });
 
   const canEdit = ["ADMIN","EDITOR"].includes(user?.rol);
-  const apiBase = typeof window !== "undefined"
-    ? window.location.origin.replace("5173","3001") : "";
+  const apiBase = (import.meta.env.VITE_API_URL || "/api").replace(/\/api\/?$/, "");
 
   const load = async () => {
     const params = new URLSearchParams();

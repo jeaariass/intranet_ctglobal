@@ -10,8 +10,6 @@ async function geoApiKeyMiddleware(req, res, next) {
   if (!apiKey) return res.status(401).json({ error: "API key requerida" });
   const project = await prisma.geoProject.findFirst({ where: { api_key: apiKey, activo: true } });
   if (!project)  return res.status(403).json({ error: "API key inválida o proyecto pausado" });
-  if (project.fecha_fin && project.fecha_fin < new Date())
-    return res.status(403).json({ error: "El contrato de este proyecto ha vencido" });
   req.project = project;
   next();
 }

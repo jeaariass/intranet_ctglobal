@@ -108,7 +108,7 @@ export default function Layout() {
             </div>
           ))}
 
-          {user?.rol === "ADMIN" && (
+          {["ADMIN","EDITOR"].includes(user?.rol) && (
             <div className="nav-section">
               <div className="nav-section-label">Sistema</div>
               <NavLink

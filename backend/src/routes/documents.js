@@ -11,10 +11,17 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename:    (req, file, cb) => {
+    // Conserva el nombre original limpiando caracteres especiales
     const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    const nombre = path.basename(file.originalname, ext)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")  // quita tildes
+      .replace(/[^a-zA-Z0-9_\-]/g, "_") // reemplaza espacios y símbolos por _
+      .substring(0, 80);                 // máximo 80 caracteres
+    cb(null, `${nombre}${ext}`);
   },
 });
+
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 },

@@ -82,8 +82,8 @@ export default function Profile() {
               <div>
                 <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{user?.nombre} {user?.apellido}</div>
                 <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{user?.cargo}</div>
-                <span className={`badge ${user?.rol === "admin" ? "badge-red" : "badge-blue"}`} style={{ marginTop: "0.35rem" }}>
-                  {user?.rol === "admin" ? "Administrador" : "Colaborador"}
+                <span className={`badge ${user?.rol === "ADMIN" ? "badge-red" : "badge-blue"}`} style={{ marginTop: "0.35rem" }}>
+                  {user?.rol === "ADMIN" ? "Administrador" : "Colaborador"}
                 </span>
               </div>
             </div>

@@ -50,7 +50,7 @@ export default function Announcements() {
           <h1>Comunicados</h1>
           <p>Noticias y anuncios internos del equipo CTGlobal</p>
         </div>
-        {user?.rol === "admin" && (
+        {["ADMIN","EDITOR"].includes(user?.rol) && (
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             + Nuevo comunicado
           </button>
@@ -90,7 +90,7 @@ export default function Announcements() {
                   {a.prioridad === "alta" && <span className="badge badge-red">Alta prioridad</span>}
                 </div>
               </div>
-              {user?.rol === "admin" && (
+              {["ADMIN","EDITOR"].includes(user?.rol) && (
                 <button className="btn btn-danger btn-sm" onClick={() => handleDelete(a.id)}>
                   Eliminar
                 </button>

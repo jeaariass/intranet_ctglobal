@@ -12,7 +12,7 @@
 -- Distinto a UserRol que es para el equipo interno
 CREATE TYPE "ProjectRol" AS ENUM (
     'VIEWER',   -- Solo puede ver capas, sin editar nada
-    'FUNCIONARIO'    -- Puede interactuar con herramientas sin cambiar usuarios y subir documentos
+    'FUNCIONARIO',    -- Puede interactuar con herramientas sin cambiar usuarios y subir documentos
     'EDITOR'    -- Puede interactuar con herramientas de edición
 );
 

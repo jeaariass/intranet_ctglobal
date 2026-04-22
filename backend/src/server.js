@@ -6,7 +6,7 @@ const rateLimit = require("express-rate-limit");
 const prisma = require("./lib/prisma");
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 4000;
 
 // ── Seguridad: headers ────────────────────────────────────────
 // X-Frame-Options DENY solo para rutas API, NO para /uploads

@@ -80,7 +80,7 @@ function InvoiceModal({ equipo, onClose }) {
   const [loading, setLoading]   = useState(true);
   const [viewer, setViewer]     = useState(null);
 
-  const apiBase = window.location.origin.replace("5173","3001");
+  const apiBase = (import.meta.env.VITE_API_URL || "/api").replace(/\/api\/?$/, "");
 
   useEffect(() => {
     api.get(`/equipment/${equipo.id}/invoices`)

@@ -62,7 +62,7 @@ export default function Admin() {
         <div className="stat-card">
           <div className="stat-icon red">⚙️</div>
           <div>
-            <div className="stat-value">{users.filter((u) => u.rol === "admin").length}</div>
+            <div className="stat-value">{users.filter((u) => u.rol === "ADMIN").length}</div>
             <div className="stat-label">Administradores</div>
           </div>
         </div>
@@ -112,8 +112,8 @@ export default function Admin() {
                     <td style={{ fontSize: "0.88rem" }}>{u.cargo || "—"}</td>
                     <td style={{ fontSize: "0.88rem" }}>{u.area || "—"}</td>
                     <td>
-                      <span className={`badge ${u.rol === "admin" ? "badge-red" : "badge-blue"}`}>
-                        {u.rol === "admin" ? "Admin" : "Colaborador"}
+                      <span className={`badge ${u.rol === "ADMIN" ? "badge-red" : "badge-blue"}`}>
+                        {u.rol === "ADMIN" ? "Admin" : "Colaborador"}
                       </span>
                     </td>
                     <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>

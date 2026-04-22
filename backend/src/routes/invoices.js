@@ -19,9 +19,15 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename:    (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    cb(null, `inv-${Date.now()}${ext}`);
+    const nombre = path.basename(file.originalname, ext)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9_\-]/g, "_")
+      .substring(0, 80);
+    cb(null, `${nombre}${ext}`);
   },
 });
+
 const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024 },
