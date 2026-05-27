@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "../services/api";
+import PasswordInput from "../components/PasswordInput";
 
 function getInitials(n, a) { return `${n?.[0] || ""}${a?.[0] || ""}`.toUpperCase(); }
 
@@ -154,8 +155,7 @@ export default function Profile() {
             <form onSubmit={handleChangePassword}>
               <div className="form-group">
                 <label className="form-label">Contraseña actual</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={pwForm.currentPassword}
                   onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
                   required
@@ -163,8 +163,7 @@ export default function Profile() {
               </div>
               <div className="form-group">
                 <label className="form-label">Nueva contraseña</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={pwForm.newPassword}
                   onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
                   minLength={8}
@@ -173,8 +172,7 @@ export default function Profile() {
               </div>
               <div className="form-group">
                 <label className="form-label">Confirmar nueva contraseña</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={pwForm.confirm}
                   onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
                   required

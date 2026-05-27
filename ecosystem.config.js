@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "intranet-ctglobal",
       script: "./backend/src/server.js",
-      cwd: "/var/www/intranet_ctglobal",
+      cwd: "/var/www/intranet",
       instances: 1,
       autorestart: true,
       watch: false,

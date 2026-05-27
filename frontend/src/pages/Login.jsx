@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Globe, Lock, Mail, ArrowRight, CheckCircle } from "lucide-react";
+import PasswordInput from "../components/PasswordInput";
 
 const FEATURES = [
   "Comunicados y gestión documental",
@@ -106,21 +107,20 @@ export default function Login() {
 
             <div className="form-group">
               <label className="form-label">Contraseña</label>
-              <div style={{ position:"relative" }}>
-                <Lock
-                  size={15}
-                  color="var(--text-light)"
-                  style={{ position:"absolute",left:"0.75rem",top:"50%",transform:"translateY(-50%)" }}
-                />
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={form.password}
-                  onChange={e => setForm({ ...form, password: e.target.value })}
-                  style={{ paddingLeft:"2.25rem" }}
-                  required
-                />
-              </div>
+              <PasswordInput
+                leftIcon={
+                  <Lock
+                    size={15}
+                    color="var(--text-light)"
+                    style={{ position:"absolute",left:"0.75rem",top:"50%",transform:"translateY(-50%)",zIndex:1 }}
+                  />
+                }
+                placeholder="••••••••"
+                value={form.password}
+                onChange={e => setForm({ ...form, password: e.target.value })}
+                style={{ paddingLeft:"2.25rem" }}
+                required
+              />
             </div>
 
             <button

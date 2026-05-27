@@ -8,26 +8,37 @@ datasource db {
 }
 
 model User {
-  id             Int            @id @default(autoincrement())
-  nombre         String
-  apellido       String
-  email          String         @unique
-  password       String
-  cargo          String         @default("")
-  area           String         @default("")
-  telefono       String         @default("")
-  avatar         String         @default("")
-  rol            UserRol        @default(EMPLEADO)
-  activo         Boolean        @default(true)
-  created_at     DateTime       @default(now()) @db.Timestamptz(6)
-  announcements  Announcement[]
-  documents      Document[]
-  equipment_logs EquipmentLog[]
-  events         Event[]
-  invoices       invoices[]
-  project_users  ProjectUser[]
-  wiki_pages     WikiPage[]
-  wiki_revisions WikiRevision[]
+  id                  Int            @id @default(autoincrement())
+  nombre              String
+  apellido            String
+  email               String         @unique
+  password            String
+  cargo               String         @default("")
+  area                String         @default("")
+  telefono            String         @default("")
+  avatar              String         @default("")
+  rol                 UserRol        @default(EMPLEADO)
+  activo              Boolean        @default(true)
+  created_at          DateTime       @default(now()) @db.Timestamptz(6)
+  cedula              String         @default("")
+  banco               String         @default("")
+  numero_cuenta_banco String         @default("")
+  tipo_cuenta         String         @default("")
+  telefono_whatsapp   String         @default("")
+  contrato_referencia String         @default("")
+  direccion           String         @default("")
+  es_persona_juridica Boolean?
+  tarjeta_profesional String         @default("")
+  proyecto_default    String         @default("")
+  firma_archivo       String         @default("")
+  announcements       Announcement[]
+  documents           Document[]
+  equipment_logs      EquipmentLog[]
+  events              Event[]
+  invoices            invoices[]
+  project_users       ProjectUser[]
+  wiki_pages          WikiPage[]
+  wiki_revisions      WikiRevision[]
 
   @@index([activo])
   @@index([email])
@@ -305,6 +316,10 @@ enum UserRol {
   ADMIN
   EDITOR
   EMPLEADO
+  CONTRATISTA
+  CONTABILIDAD
+  SUPERVISION
+  TESORERIA
 }
 
 enum AnnouncementTipo {

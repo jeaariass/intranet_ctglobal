@@ -4,6 +4,7 @@ import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import PasswordInput from "../components/PasswordInput";
 
 export default function GeoProjectDetail() {
   const { id } = useParams();
@@ -367,7 +368,7 @@ export default function GeoProjectDetail() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Contraseña inicial</label>
-                    <input type="password" value={userForm.password} onChange={e => setUserForm({...userForm,password:e.target.value})} placeholder="Mín. 8 caracteres" />
+                    <PasswordInput value={userForm.password} onChange={e => setUserForm({...userForm,password:e.target.value})} placeholder="Mín. 8 caracteres" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Rol</label>
