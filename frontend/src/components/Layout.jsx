@@ -6,7 +6,7 @@ import { es } from "date-fns/locale";
 import {
   Home, Megaphone, FolderOpen, Users, CalendarDays,
   BookOpen, Monitor, Map, BarChart2, Settings,
-  LogOut, Menu, ChevronRight, Globe, Receipt
+  LogOut, Menu, ChevronRight, Globe, Receipt, Bell
 } from "lucide-react";
 
 const NAV_GROUPS = [
@@ -21,10 +21,11 @@ const NAV_GROUPS = [
   {
     label: "Gestión",
     items: [
-      { to: "/documentos",  icon: FolderOpen,    label: "Documentos" },
-      { to: "/wiki",        icon: BookOpen,      label: "Buenas Prácticas" },
-      { to: "/equipos",     icon: Monitor,       label: "Inventario" },
-      { to: "/directorio",  icon: Users,         label: "Directorio" },
+      { to: "/documentos",     icon: FolderOpen,    label: "Documentos" },
+      { to: "/wiki",           icon: BookOpen,      label: "Buenas Prácticas" },
+      { to: "/equipos",        icon: Monitor,       label: "Inventario" },
+      { to: "/directorio",     icon: Users,         label: "Directorio" },
+      { to: "/recordatorios",  icon: Bell,          label: "Recordatorios" },
     ],
   },
   {
@@ -38,18 +39,19 @@ const NAV_GROUPS = [
 ];
 
 const PAGE_TITLES = {
-  "/":            "Inicio",
-  "/comunicados": "Comunicados",
-  "/documentos":  "Documentos",
-  "/directorio":  "Directorio",
-  "/calendario":  "Calendario",
-  "/wiki":        "Buenas Prácticas",
-  "/equipos":     "Inventario de Equipos",
-  "/geovisores":  "Proyectos GIS",
-  "/reportes":    "Reportes",
-  "/facturas":    "Facturación",
-  "/perfil":      "Mi Perfil",
-  "/admin":       "Administración",
+  "/":               "Inicio",
+  "/comunicados":    "Comunicados",
+  "/documentos":     "Documentos",
+  "/directorio":     "Directorio",
+  "/calendario":     "Calendario",
+  "/wiki":           "Buenas Prácticas",
+  "/equipos":        "Inventario de Equipos",
+  "/geovisores":     "Proyectos GIS",
+  "/reportes":       "Reportes",
+  "/facturas":       "Facturación",
+  "/recordatorios":  "Recordatorios",
+  "/perfil":         "Mi Perfil",
+  "/admin":          "Administración",
 };
 
 function getInitials(n, a) {

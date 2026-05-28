@@ -39,6 +39,8 @@ model User {
   project_users       ProjectUser[]
   wiki_pages          WikiPage[]
   wiki_revisions      WikiRevision[]
+  reminders_recibidos Reminder[]     @relation("RemDestinatario")
+  reminders_creados   Reminder[]     @relation("RemCreador")
 
   @@index([activo])
   @@index([email])
@@ -396,4 +398,73 @@ enum InvoiceTipo {
   SERVICIO_ANUAL
   MANTENIMIENTO
   OTRO
+}
+
+model Reminder {
+  id              Int           @id @default(autoincrement())
+  titulo          String
+  mensaje         String
+  tipo            ReminderTipo  @default(GENERAL)
+
+  destinatario_id Int?
+  destinatario    User?         @relation("RemDestinatario", fields: [destinatario_id], references: [id], onUpdate: NoAction)
+  telefono_manual String        @default("")
+
+  frecuencia      ReminderFrec
+  intervalo_dias  Int?
+  dia_semana      Int?
+  dia_mes         Int?
+  hora            String        @default("09:00")
+
+  fecha_inicio    DateTime      @db.Date
+  fecha_caducidad DateTime?     @db.Date
+  proximo_envio   DateTime      @db.Timestamptz(6)
+  ultimo_envio    DateTime?     @db.Timestamptz(6)
+  veces_enviado   Int           @default(0)
+
+  activo          Boolean       @default(true)
+  pausado         Boolean       @default(false)
+
+  creado_por_id   Int?
+  creado_por      User?         @relation("RemCreador", fields: [creado_por_id], references: [id], onUpdate: NoAction)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+
+  logs            ReminderLog[]
+
+  @@index([destinatario_id])
+  @@index([creado_por_id])
+  @@index([tipo])
+  @@map("reminders")
+}
+
+model ReminderLog {
+  id                    Int      @id @default(autoincrement())
+  reminder_id           Int
+  reminder              Reminder @relation(fields: [reminder_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  enviado_at            DateTime @default(now()) @db.Timestamptz(6)
+  canal                 String   @default("WHATSAPP")
+  destinatario_snapshot String   @default("")
+  exito                 Boolean  @default(false)
+  error                 String   @default("")
+
+  @@index([reminder_id])
+  @@index([enviado_at(sort: Desc)])
+  @@map("reminder_logs")
+}
+
+enum ReminderTipo {
+  PAGO
+  ENTREGA
+  DOCUMENTO
+  REUNION
+  GENERAL
+}
+
+enum ReminderFrec {
+  UNICA
+  DIARIA
+  SEMANAL
+  MENSUAL
+  CADA_N_DIAS
 }

@@ -16,6 +16,7 @@ import GeoProjects from "./pages/GeoProjects";
 import GeoProjectDetail from "./pages/GeoProjectDetail";
 import Reports from "./pages/Reports";
 import Invoices from "./pages/Invoices";
+import Reminders from "./pages/Reminders";
 import NotFound from "./pages/NotFound";
 
 function PrivateRoute({ children }) {
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="geovisores/:id" element={<GeoProjectDetail />} />
             <Route path="reportes" element={<Reports />} />
             <Route path="facturas" element={<Invoices />} />
+            <Route path="recordatorios" element={<Reminders />} />
             <Route path="perfil" element={<Profile />} />
             <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
           </Route>

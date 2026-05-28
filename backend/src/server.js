@@ -4,6 +4,7 @@ const cors = require("cors");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
 const prisma = require("./lib/prisma");
+const { startScheduler } = require("./lib/reminderScheduler");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -53,6 +54,7 @@ app.use("/api/geoauth",       loginLimiter, require("./routes/geoauth"));
 app.use("/api/sessions",      apiLimiter,   require("./routes/sessions"));
 app.use("/api/invoices",     apiLimiter,   require("./routes/invoices"));
 app.use("/api/reports",       apiLimiter,   require("./routes/reports"));
+app.use("/api/reminders",     apiLimiter,   require("./routes/reminders"));
 
 // ── Health check ──────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
@@ -77,6 +79,9 @@ app.use("/api/*", (req, res) => res.status(404).json({ error: "Ruta no encontrad
 async function start() {
   await prisma.$connect();
   console.log("✅ Conectado a PostgreSQL");
+
+  startScheduler();
+
   app.listen(PORT, () =>
     console.log(`✅ Servidor CTGlobal v2 en http://localhost:${PORT}`)
   );
