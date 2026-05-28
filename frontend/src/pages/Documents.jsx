@@ -32,8 +32,8 @@ function FileViewer({ url, nombre, onClose }) {
 
   // Google Docs Viewer para archivos Office
   const viewerUrl = isOffice
-  ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
-  : url;
+    ? `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`
+    : url;
 
   return (
     <div
