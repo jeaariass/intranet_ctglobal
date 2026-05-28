@@ -26,8 +26,8 @@ const labelOfRol = (r) => ROLES.find((x) => x.value === r)?.label || r;
 
 const emptyCreate = {
   nombre: "", apellido: "", email: "", password: "",
-  cargo: "", area: "", telefono: "", rol: "EMPLEADO",
-  cedula: "", direccion: "", telefono_whatsapp: "",
+  cargo: "", area: "", telefono_whatsapp: "", rol: "EMPLEADO",
+  cedula: "", direccion: "",
   tarjeta_profesional: "", es_persona_juridica: null,
 };
 
@@ -90,11 +90,10 @@ export default function Admin() {
       apellido: u.apellido || "",
       cargo: u.cargo || "",
       area: u.area || "",
-      telefono: u.telefono || "",
+      telefono_whatsapp: u.telefono_whatsapp || "",
       rol: u.rol,
       cedula: u.cedula || "",
       direccion: u.direccion || "",
-      telefono_whatsapp: u.telefono_whatsapp || "",
       tarjeta_profesional: u.tarjeta_profesional || "",
       es_persona_juridica: u.es_persona_juridica ?? null,
     });
@@ -300,8 +299,15 @@ export default function Admin() {
                 </div>
                 <div className="form-grid">
                   <div className="form-group">
-                    <label className="form-label">Teléfono</label>
-                    <input value={createForm.telefono} onChange={(e) => setCreateForm({ ...createForm, telefono: e.target.value })} />
+                    <label className="form-label">WhatsApp</label>
+                    <input
+                      value={createForm.telefono_whatsapp}
+                      onChange={(e) => setCreateForm({ ...createForm, telefono_whatsapp: e.target.value })}
+                      placeholder="+573001234567"
+                    />
+                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                      Usado por el módulo de Recordatorios. Formato: +57 + número (sin espacios).
+                    </span>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Rol</label>
@@ -365,8 +371,15 @@ export default function Admin() {
                 </div>
                 <div className="form-grid">
                   <div className="form-group">
-                    <label className="form-label">Teléfono</label>
-                    <input value={editForm.telefono} onChange={(e) => setEditForm({ ...editForm, telefono: e.target.value })} />
+                    <label className="form-label">WhatsApp</label>
+                    <input
+                      value={editForm.telefono_whatsapp}
+                      onChange={(e) => setEditForm({ ...editForm, telefono_whatsapp: e.target.value })}
+                      placeholder="+573001234567"
+                    />
+                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                      Usado por el módulo de Recordatorios. Formato: +57 + número (sin espacios).
+                    </span>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Rol</label>
@@ -417,17 +430,9 @@ function ContractorFields({ form, setForm }) {
           <input value={form.cedula} onChange={(e) => setForm({ ...form, cedula: e.target.value })} />
         </div>
         <div className="form-group">
-          <label className="form-label">WhatsApp</label>
-          <input
-            value={form.telefono_whatsapp}
-            onChange={(e) => setForm({ ...form, telefono_whatsapp: e.target.value })}
-            placeholder="+573001234567"
-          />
+          <label className="form-label">Dirección</label>
+          <input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
         </div>
-      </div>
-      <div className="form-group">
-        <label className="form-label">Dirección</label>
-        <input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
       </div>
       <div className="form-grid">
         <div className="form-group">

@@ -36,8 +36,8 @@ router.get("/me", authMiddleware, async (req, res, next) => {
       where: { id: req.user.id },
       select: {
         id: true, nombre: true, apellido: true, email: true,
-        cargo: true, area: true, telefono: true, avatar: true,
-        rol: true, created_at: true,
+        cargo: true, area: true, telefono: true, telefono_whatsapp: true,
+        avatar: true, rol: true, created_at: true,
       },
     });
     if (!user) return res.status(404).json({ error: "Usuario no encontrado" });

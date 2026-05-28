@@ -92,13 +92,16 @@ router.put("/:id", authMiddleware, async (req, res, next) => {
     const data = {};
 
     // Cualquiera (sí mismo o admin) puede editar estos campos básicos.
-    for (const f of ["nombre", "apellido", "cargo", "area", "telefono"]) {
+    // telefono_whatsapp se incluye aquí porque cualquier usuario debe poder
+    // configurar su propio número para recibir recordatorios.
+    for (const f of ["nombre", "apellido", "cargo", "area", "telefono", "telefono_whatsapp"]) {
       if (req.body[f] !== undefined) data[f] = req.body[f];
     }
 
-    // Solo admin: rol y datos personales del contratista.
-    // Banco, cuenta, tipo_cuenta, contrato_referencia, proyecto_default, firma_archivo
-    // se administran desde el panel de Trámites; aquí no se aceptan.
+    // Solo admin: rol y datos personales del contratista (cédula, dirección,
+    // tarjeta profesional, persona jurídica). Banco, cuenta, tipo_cuenta,
+    // contrato_referencia, proyecto_default, firma_archivo se administran
+    // desde el panel de Trámites; aquí no se aceptan.
     if (isAdmin) {
       if (req.body.rol !== undefined) {
         const rolFinal = normalizeRol(req.body.rol);
@@ -106,7 +109,7 @@ router.put("/:id", authMiddleware, async (req, res, next) => {
           return res.status(400).json({ error: "Rol inválido" });
         data.rol = rolFinal;
       }
-      for (const f of ["cedula", "direccion", "telefono_whatsapp", "tarjeta_profesional"]) {
+      for (const f of ["cedula", "direccion", "tarjeta_profesional"]) {
         if (req.body[f] !== undefined) data[f] = req.body[f];
       }
       if (req.body.es_persona_juridica !== undefined) {

@@ -20,11 +20,17 @@ intranet_ctglobal/
 │   │   └── styles/       # CSS global
 │   └── vite.config.js
 │
-├── backend/           # Node.js + Express + SQLite
+├── backend/           # Node.js + Express + PostgreSQL (Prisma)
 │   ├── src/
-│   │   ├── routes/       # auth, users, announcements, documents, events
-│   │   ├── models/       # database.js (SQLite init)
+│   │   ├── routes/       # auth, users, announcements, documents, events,
+│   │   │                 # wiki, equipment, geoprojects, geoauth, sessions,
+│   │   │                 # invoices, reports, reminders
+│   │   ├── lib/          # prisma.js, whatsappClient.js, reminderScheduler.js
 │   │   └── middleware/   # JWT auth
+│   ├── prisma/
+│   │   ├── schema.prisma     # modelos + enums
+│   │   ├── migrations/       # 011 → reminders
+│   │   └── run-migrations.js # runner idempotente
 │   └── uploads/          # archivos subidos (auto-creado)
 │
 ├── nginx.conf         # Config Nginx para el subdominio
@@ -74,17 +80,35 @@ npm run dev
 
 ### Backend (`backend/.env`)
 ```env
-PORT=3001
+PORT=4000
+NODE_ENV=production
+
+# Base de datos (compartida con T_INTRANET)
+DATABASE_URL=postgresql://gisuser:gispass@200.7.107.14:5432/ctglobal_platform
+
+# Auth (mismo secret en intranet + T_INTRANET para SSO)
 JWT_SECRET=una_clave_muy_segura_aqui
 JWT_EXPIRES_IN=8h
-NODE_ENV=production
+
+# Frontend
 FRONTEND_URL=https://intranet.ctglobal.com.co
+
+# Recordatorios — endpoint HTTP de T_INTRANET para envíos WhatsApp
+# T_INTRANET es dueño de la sesión Baileys. La intranet delega los envíos vía
+# POST con header x-service-token. El valor debe coincidir EXACTAMENTE con el
+# INTRANET_SERVICE_TOKEN del .env de T_INTRANET.
+TRAMITES_NOTIF_URL=https://tramites.ctglobal.com.co/api/notif/whatsapp
+TRAMITES_SERVICE_TOKEN=<token de 64 hex compartido con T_INTRANET>
+
+# Zona horaria para el scheduler de recordatorios
+TZ=America/Bogota
 ```
 
 ### Frontend (`frontend/.env`)
 ```env
 VITE_API_URL=https://intranet.ctglobal.com.co/api
 ```
+> ⚠️ **Sin esta variable, Vite buildea con baseURL relativo `/api` y el visor de documentos Office (Google Docs viewer) falla con URLs `/uploads/...` relativas. Siempre configurar antes del primer `npm run build` en producción.**
 
 ---
 
@@ -367,14 +391,190 @@ git remote set-url origin git@github.com-tramites:jeaariass/t_intranet.git
 
 | Módulo | Descripción |
 |--------|-------------|
-| 🔐 Login | Autenticación JWT con sesión de 8h |
-| 🏠 Dashboard | Resumen, stats, accesos rápidos |
+| 🔐 Login | Autenticación JWT con sesión de 8h (SSO con T_INTRANET — mismo JWT_SECRET) |
+| 🏠 Dashboard | Resumen, stats, accesos rápidos, alertas de vencimientos |
 | 📢 Comunicados | Publicación y filtrado de anuncios internos |
-| 📁 Documentos | Repositorio con carga/descarga de archivos |
+| 📁 Documentos | Repositorio con carga/descarga + visor PDF/imagen/Office (Google Docs viewer) |
+| 📚 Wiki | Buenas prácticas en Markdown con historial de revisiones |
+| 🖥️ Inventario | Equipos físicos + licencias + bitácora de movimientos + facturas vinculadas |
+| 🗺️ Geovisores | Gestión de proyectos GIS, accesos por cliente, API keys, integración SDK |
+| 📊 Reportes | Vista ejecutiva: sesiones activas, top capas, uso de equipos |
+| 💰 Facturación | Control de facturas, dual-currency (COP+USD), alertas de vencimiento |
+| 🔔 Recordatorios | Mensajes WhatsApp programados (única / diaria / semanal / mensual / cada N días) |
 | 👥 Directorio | Tarjetas de empleados con búsqueda |
 | 📅 Calendario | Vista mensual con eventos corporativos |
 | 👤 Perfil | Edición de datos y cambio de contraseña |
-| ⚙️ Admin | Gestión de usuarios (solo admins) |
+| ⚙️ Admin | Gestión de usuarios + datos de contratistas (read-only de T_INTRANET) |
+
+---
+
+## 🔔 Módulo de Recordatorios — WhatsApp programados
+
+Permite a ADMIN/EDITOR programar mensajes automáticos que se envían por WhatsApp en intervalos definidos (pagos pendientes, entregas de productos, recordatorios de subir documentos, etc.) hasta una fecha de caducidad opcional.
+
+### Arquitectura — por qué pasa por T_INTRANET
+
+WhatsApp Baileys (cliente no oficial) permite **una sola sesión activa por número de teléfono**. T_INTRANET ya tiene esa sesión emparejada y la usa para sus notificaciones de cuentas de cobro. Si la intranet abriera su propia sesión con la misma carpeta de credenciales, WhatsApp expulsaría a una de las dos apps.
+
+Solución: la intranet **delega el envío vía HTTP** al endpoint `POST /api/notif/whatsapp` de T_INTRANET, autenticado con un service token compartido en ambos `.env`.
+
+```
+┌─────────────────────────────────────┐
+│  INTRANET (puerto 4000)             │
+│                                     │
+│  Scheduler (node-cron, cada minuto) │
+│    ↓ consulta reminders pendientes  │
+│  whatsappClient.js                  │
+│    ↓ axios.post con x-service-token │
+└──────────────┬──────────────────────┘
+               │ HTTPS
+               ↓
+┌─────────────────────────────────────┐
+│  T_INTRANET (puerto 4002)           │
+│                                     │
+│  POST /api/notif/whatsapp           │
+│    ↓ valida token                   │
+│  enviarWhatsApp() → Baileys → ✅    │
+│    ↓ logging unificado en           │
+│  tramites.tramites_notificaciones   │
+└─────────────────────────────────────┘
+```
+
+### Frecuencias soportadas
+
+| Frecuencia | Campos requeridos | Ejemplo |
+|---|---|---|
+| `UNICA` | `fecha_inicio`, `hora` | "Recordar firma del contrato el 15 de junio a las 09:00" |
+| `DIARIA` | `hora` | "Cada día a las 08:30 revisar bandeja de aprobaciones" |
+| `SEMANAL` | `dia_semana` (0=Dom..6=Sáb), `hora` | "Cada lunes 09:00 enviar reporte semanal" |
+| `MENSUAL` | `dia_mes` (1..31), `hora` | "Día 25 de cada mes pagar factura de servicios" |
+| `CADA_N_DIAS` | `intervalo_dias` (≥1), `hora` | "Cada 15 días recordar revisar backup" |
+
+Notas:
+- **MENSUAL con día > 28**: si el mes no tiene ese día (ej. 31 de febrero), se ajusta al último día del mes.
+- **Hora**: formato `HH:MM` en zona `America/Bogota` (definido por `TZ` en `.env`).
+- **Caducidad**: fecha opcional tras la cual el recordatorio se desactiva automáticamente.
+
+### Modelos de datos (schema `public`)
+
+Migration **011_reminders** crea:
+
+```
+reminders               → definición del recordatorio
+  ├── frecuencia + parámetros (intervalo_dias / dia_semana / dia_mes / hora)
+  ├── destinatario_id (FK a users) o telefono_manual
+  ├── fecha_inicio + fecha_caducidad
+  ├── proximo_envio (calculado por scheduler)
+  ├── activo / pausado
+  └── CHECK constraints garantizando parámetros según frecuencia
+
+reminder_logs           → bitácora de cada envío
+  ├── canal (WHATSAPP)
+  ├── destinatario_snapshot (teléfono usado al momento)
+  └── exito / error
+```
+
+Índice clave para el scheduler:
+```sql
+CREATE INDEX reminders_scheduler_idx
+  ON reminders(proximo_envio)
+  WHERE activo = TRUE AND pausado = FALSE;
+```
+
+### Endpoints
+
+| Método | Ruta | Permisos | Función |
+|---|---|---|---|
+| GET    | `/api/reminders` | autenticado | Listar (filtros: `tipo`, `activo`, `destinatarioId`, `q`) |
+| GET    | `/api/reminders/:id` | autenticado | Ver detalle |
+| GET    | `/api/reminders/:id/logs` | autenticado | Historial de envíos (últimos 100) |
+| POST   | `/api/reminders` | ADMIN+EDITOR | Crear |
+| PUT    | `/api/reminders/:id` | ADMIN+EDITOR | Editar (recalcula próximo envío si cambia frecuencia/hora) |
+| PATCH  | `/api/reminders/:id/toggle-pause` | ADMIN+EDITOR | Pausar/reanudar sin borrar |
+| DELETE | `/api/reminders/:id` | ADMIN+EDITOR | Soft delete (marca `activo=false`, conserva logs) |
+| POST   | `/api/reminders/:id/test` | ADMIN+EDITOR | Forzar envío inmediato sin afectar el ciclo programado |
+
+### Scheduler
+
+`backend/src/lib/reminderScheduler.js` usa `node-cron` con un tick cada minuto:
+
+```js
+cron.schedule("* * * * *", tick, { timezone: TZ });
+```
+
+En cada tick:
+1. Consulta `reminders` con `proximo_envio <= NOW()` activos y no pausados.
+2. Por cada uno: resuelve teléfono (`destinatario.telefono_whatsapp || telefono_manual`).
+3. POST a `TRAMITES_NOTIF_URL` con header `x-service-token: TRAMITES_SERVICE_TOKEN`.
+4. Crea fila en `reminder_logs` con resultado.
+5. Calcula nuevo `proximo_envio` según la frecuencia (o desactiva si es `UNICA` o pasó `fecha_caducidad`).
+
+> ⚠️ PM2 corre con `instances: 1`. Si en el futuro escalas a cluster (varias instancias), añadir un lock (Postgres advisory lock o tabla aparte) para evitar doble disparo.
+
+### UI
+
+`/recordatorios` (sidebar → Gestión → Recordatorios):
+- Lista con stats (activos / pausados / inactivos / envíos totales)
+- Filtros por tipo, estado activo, búsqueda en título/mensaje
+- Modal crear/editar con campos condicionales según frecuencia
+- Botón **Enviar prueba** (icono avión) — dispara WhatsApp inmediato sin alterar ciclo
+- Botón **Historial** (icono reloj) — modal con últimos 100 logs
+- Botón **Pausar/Reanudar** sin borrar
+- Soft delete con confirmación
+
+> 💡 El dropdown de destinatario solo muestra usuarios que tienen `telefono_whatsapp` configurado en su perfil. Para destinos externos (no usuarios del sistema), usar el campo "teléfono manual" con formato `+57XXXXXXXXXX`.
+
+### Configuración previa al primer uso
+
+1. **Configurar `telefono_whatsapp` para cada usuario del equipo** que vaya a recibir recordatorios:
+   - Admin → Editar usuario → campo "WhatsApp" → formato `+57XXXXXXXXXX`
+   - O directamente en BD si es masivo:
+     ```sql
+     UPDATE users SET telefono_whatsapp = '+57XXXXXXXXXX' WHERE email = 'usuario@ctglobal.com.co';
+     ```
+
+2. **Verificar que T_INTRANET tiene el endpoint disponible**:
+   ```bash
+   curl https://tramites.ctglobal.com.co/api/notif/ping \
+     -H "x-service-token: $TRAMITES_SERVICE_TOKEN"
+   ```
+   Esperado: `{"ok":true,"service":"tramites-ctglobal","ts":"..."}`.
+
+3. **Confirmar variables en `backend/.env` de la intranet**:
+   ```bash
+   grep -E "TRAMITES_NOTIF_URL|TRAMITES_SERVICE_TOKEN|TZ" /var/www/intranet/backend/.env
+   ```
+   Si falta alguna, agregarla y `pm2 restart intranet-ctglobal --update-env`.
+
+4. **Verificar que el scheduler arrancó** después del deploy:
+   ```bash
+   pm2 logs intranet-ctglobal --lines 30 | grep scheduler
+   ```
+   Debe imprimir: `[scheduler] iniciado (cada minuto, TZ=America/Bogota)`.
+
+### Troubleshooting recordatorios
+
+- **No llega ningún WhatsApp**:
+  - `pm2 logs intranet-ctglobal | grep scheduler` — ¿el scheduler está activo?
+  - `curl /api/notif/ping` a T_INTRANET — ¿endpoint responde?
+  - Verificar `TRAMITES_SERVICE_TOKEN` idéntico en ambos `.env`.
+  - Ver `reminder_logs` → columna `error` te dice si falla por red, token o teléfono inválido.
+
+- **Llegan demasiado tarde / a hora equivocada**:
+  - Verificar `TZ=America/Bogota` en `backend/.env` (sin esto, el cron interpreta `09:00` como UTC).
+  - Servidor debe tener hora correcta: `timedatectl status` en VPS.
+
+- **Día 31 en febrero — qué pasa**:
+  - El scheduler ajusta al último día del mes (28 o 29). Comportamiento intencional, ver `calcularProximoEnvio` en `reminderScheduler.js`.
+
+- **Recordatorio "fantasma" que no se borra**:
+  - DELETE es soft (marca `activo=false`). Para borrar de la BD:
+    ```sql
+    DELETE FROM reminders WHERE id = X;
+    -- (los reminder_logs se borran en cascada)
+    ```
+
+---
 
 ---
 
@@ -382,13 +582,17 @@ git remote set-url origin git@github.com-tramites:jeaariass/t_intranet.git
 
 | Parte | Tecnología |
 |-------|-----------|
-| Frontend | React 18 + Vite, React Router v6 |
+| Frontend | React 18 + Vite, React Router v6, axios, date-fns, lucide-react |
 | Estilos | CSS puro con variables (sin frameworks) |
-| Backend | Node.js + Express |
-| Base de datos | SQLite (better-sqlite3) |
-| Auth | JWT (jsonwebtoken + bcryptjs) |
-| Uploads | Multer |
-| Servidor | Nginx + PM2 |
+| Backend | Node.js 20 + Express |
+| Base de datos | PostgreSQL 14 con PostGIS (en Docker, compartida con T_INTRANET y geovisores) |
+| ORM | Prisma 5 (cliente JS) |
+| Auth | JWT (jsonwebtoken + bcryptjs) — SSO con T_INTRANET (mismo `JWT_SECRET`) |
+| Uploads | Multer (documentos hasta 50MB, facturas hasta 20MB) |
+| Scheduler | node-cron (recordatorios cada minuto, TZ America/Bogota) |
+| WhatsApp | Delegado por HTTP a T_INTRANET (sesión Baileys única) |
+| Rate limiting | express-rate-limit (login 20/min, API 300/min) |
+| Servidor | Nginx + PM2 (proceso `intranet-ctglobal`) |
 | SSL | Let's Encrypt (Certbot) |
 
 ---

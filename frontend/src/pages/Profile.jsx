@@ -15,7 +15,7 @@ export default function Profile() {
     apellido: user?.apellido || "",
     cargo: user?.cargo || "",
     area: user?.area || "",
-    telefono: user?.telefono || "",
+    telefono_whatsapp: user?.telefono_whatsapp || "",
   });
   const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirm: "" });
   const [saving, setSaving] = useState(false);
@@ -113,8 +113,12 @@ export default function Profile() {
                     <input value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Teléfono</label>
-                    <input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+                    <label className="form-label">WhatsApp</label>
+                    <input
+                      value={form.telefono_whatsapp}
+                      onChange={(e) => setForm({ ...form, telefono_whatsapp: e.target.value })}
+                      placeholder="+573001234567"
+                    />
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
@@ -130,7 +134,7 @@ export default function Profile() {
                   { label: "Correo", value: user?.email, icon: "✉️" },
                   { label: "Cargo", value: user?.cargo || "—", icon: "💼" },
                   { label: "Área", value: user?.area || "—", icon: "🏢" },
-                  { label: "Teléfono", value: user?.telefono || "—", icon: "📞" },
+                  { label: "WhatsApp", value: user?.telefono_whatsapp || "—", icon: "💬" },
                   { label: "Miembro desde", value: user?.created_at ? format(new Date(user.created_at), "d 'de' MMMM, yyyy", { locale: es }) : "—", icon: "📅" },
                 ].map(({ label, value, icon }) => (
                   <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border)" }}>

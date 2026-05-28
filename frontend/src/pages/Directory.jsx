@@ -91,9 +91,13 @@ export default function Directory() {
                 <a href={`mailto:${u.email}`} style={{ fontSize: "0.78rem", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem" }}>
                   ✉️ {u.email}
                 </a>
-                {u.telefono && (
-                  <a href={`tel:${u.telefono}`} style={{ fontSize: "0.78rem", color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem" }}>
-                    📞 {u.telefono}
+                {u.telefono_whatsapp && (
+                  <a
+                    href={`https://wa.me/${u.telefono_whatsapp.replace(/[^0-9]/g, "")}`}
+                    target="_blank" rel="noreferrer"
+                    style={{ fontSize: "0.78rem", color: "#25D366", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem" }}
+                  >
+                    💬 {u.telefono_whatsapp}
                   </a>
                 )}
               </div>
