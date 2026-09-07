@@ -76,6 +76,7 @@ export default function Reminders() {
   const [error, setError]         = useState("");
   const [logsModal, setLogsModal] = useState(null);
   const [logs, setLogs]           = useState([]);
+  const [waStatus, setWaStatus]   = useState(null);
 
   const load = async () => {
     const params = new URLSearchParams();
@@ -92,6 +93,12 @@ export default function Reminders() {
   };
 
   useEffect(() => { load(); }, [filter.tipo, filter.activo]);
+
+  useEffect(() => {
+    api.get("/reminders/whatsapp-status")
+      .then(r => setWaStatus(r.data))
+      .catch(() => setWaStatus(null));
+  }, []);
 
   const filtered = useMemo(() => {
     if (!filter.q) return items;
@@ -194,6 +201,24 @@ export default function Reminders() {
           </button>
         )}
       </div>
+
+      {waStatus && waStatus.status !== "open" && (
+        <div className="alert alert-error"
+          style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", marginBottom: "1.5rem" }}>
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <strong>WhatsApp desconectado — los recordatorios no se están enviando.</strong>
+            <div style={{ fontSize: "0.85rem", marginTop: "0.2rem" }}>
+              Un administrador debe volver a vincular el número en{" "}
+              <a href="https://tramites.ctglobal.com.co/whatsapp" target="_blank" rel="noreferrer"
+                style={{ fontWeight: 600 }}>
+                tramites.ctglobal.com.co/whatsapp
+              </a>
+              {waStatus.lastError ? ` — ${waStatus.lastError}` : ""}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: "1.5rem" }}>

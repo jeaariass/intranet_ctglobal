@@ -85,4 +85,23 @@ async function ping() {
   }
 }
 
-module.exports = { enviarWhatsApp, ping };
+/**
+ * Estado de la conexión de WhatsApp en T_INTRANET (sin QR).
+ * @returns {Promise<{status:string, since?:string, lastError?:string, error?:string}>}
+ *   status: 'open' | 'qr' | 'connecting' | 'close' | 'starting' | 'desconocido'
+ */
+async function estadoWhatsApp() {
+  if (!URL || !TOKEN) return { status: "desconocido", error: "config faltante" };
+  try {
+    const statusUrl = URL.replace(/\/whatsapp$/, "/wa-status");
+    const res = await axios.get(statusUrl, {
+      headers: { "x-service-token": TOKEN },
+      timeout: 5000,
+    });
+    return res.data;
+  } catch (e) {
+    return { status: "desconocido", error: e.message };
+  }
+}
+
+module.exports = { enviarWhatsApp, ping, estadoWhatsApp };

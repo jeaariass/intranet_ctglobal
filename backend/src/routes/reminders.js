@@ -10,6 +10,7 @@ const router = require("express").Router();
 const prisma = require("../lib/prisma");
 const { authMiddleware, editorMiddleware } = require("../middleware/auth");
 const { calcularProximoInicial, _procesar } = require("../lib/reminderScheduler");
+const { estadoWhatsApp } = require("../lib/whatsappClient");
 
 const TIPOS_VALIDOS = ["PAGO", "ENTREGA", "DOCUMENTO", "REUNION", "GENERAL"];
 const FRECS_VALIDAS = ["UNICA", "DIARIA", "SEMANAL", "MENSUAL", "CADA_N_DIAS"];
@@ -71,6 +72,15 @@ function serializar(r) {
       : null,
   };
 }
+
+// ── GET /api/reminders/whatsapp-status ───────────────────────
+// Estado de la conexión de WhatsApp en T_INTRANET, para mostrar un aviso
+// en el módulo de Recordatorios si está caída.
+router.get("/whatsapp-status", authMiddleware, async (req, res, next) => {
+  try {
+    res.json(await estadoWhatsApp());
+  } catch (e) { next(e); }
+});
 
 // ── GET /api/reminders ───────────────────────────────────────
 // Filtros: ?tipo=PAGO&activo=true&destinatarioId=5
