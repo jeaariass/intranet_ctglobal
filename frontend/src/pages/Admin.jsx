@@ -37,6 +37,8 @@ function getInitials(n, a) {
 
 export default function Admin() {
   const [users, setUsers] = useState([]);
+  const [inactivos, setInactivos] = useState([]);
+  const [view, setView] = useState("activos"); // "activos" | "inactivos"
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -53,20 +55,24 @@ export default function Admin() {
 
   const load = () => {
     setLoading(true);
-    api.get("/users").then((r) => setUsers(r.data)).finally(() => setLoading(false));
+    Promise.all([
+      api.get("/users").then((r) => setUsers(r.data)),
+      api.get("/users/inactivos").then((r) => setInactivos(r.data)).catch(() => setInactivos([])),
+    ]).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
-    return users.filter((u) => {
+    const source = view === "inactivos" ? inactivos : users;
+    return source.filter((u) => {
       if (filterRol !== "ALL" && u.rol !== filterRol) return false;
       if (!s) return true;
       return [u.nombre, u.apellido, u.email, u.cargo, u.area, u.cedula]
         .some((v) => (v || "").toLowerCase().includes(s));
     });
-  }, [users, filterRol, search]);
+  }, [users, inactivos, view, filterRol, search]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -122,6 +128,12 @@ export default function Admin() {
     load();
   };
 
+  const handleReactivate = async (id) => {
+    if (!confirm("¿Reactivar este usuario? Podrá volver a iniciar sesión.")) return;
+    await api.patch(`/users/${id}/reactivar`);
+    load();
+  };
+
   return (
     <>
       <div className="page-header">
@@ -164,6 +176,18 @@ export default function Admin() {
             <div className="stat-label">Áreas</div>
           </div>
         </div>
+        <div
+          className="stat-card"
+          style={{ cursor: "pointer" }}
+          onClick={() => setView("inactivos")}
+          title="Ver usuarios desactivados"
+        >
+          <div className="stat-icon gray">🚫</div>
+          <div>
+            <div className="stat-value">{inactivos.length}</div>
+            <div className="stat-label">Desactivados</div>
+          </div>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -189,8 +213,22 @@ export default function Admin() {
 
       {/* Tabla de usuarios */}
       <div className="card">
-        <div className="card-header">
-          <h2>Usuarios del sistema</h2>
+        <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2>{view === "inactivos" ? "Usuarios desactivados" : "Usuarios del sistema"}</h2>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              className={`btn btn-sm ${view === "activos" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setView("activos")}
+            >
+              Activos ({users.length})
+            </button>
+            <button
+              className={`btn btn-sm ${view === "inactivos" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setView("inactivos")}
+            >
+              Desactivados ({inactivos.length})
+            </button>
+          </div>
         </div>
         {loading ? (
           <div className="loader"><div className="spinner" /></div>
@@ -232,12 +270,20 @@ export default function Admin() {
                       {new Date(u.created_at).toLocaleDateString("es-CO")}
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => openEdit(u)}>
-                        Editar
-                      </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleDeactivate(u.id)}>
-                        Desactivar
-                      </button>
+                      {view === "inactivos" ? (
+                        <button className="btn btn-primary btn-sm" onClick={() => handleReactivate(u.id)}>
+                          Reactivar
+                        </button>
+                      ) : (
+                        <>
+                          <button className="btn btn-ghost btn-sm" onClick={() => openEdit(u)}>
+                            Editar
+                          </button>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDeactivate(u.id)}>
+                            Desactivar
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

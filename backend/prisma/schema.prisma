@@ -151,28 +151,66 @@ model WikiRevision {
 }
 
 model Equipment {
-  id                    Int             @id @default(autoincrement())
+  id                    Int                 @id @default(autoincrement())
   nombre                String
-  tipo                  EquipmentTipo
-  marca                 String          @default("")
-  modelo                String          @default("")
-  serial                String          @default("")
-  estado                EquipmentEstado @default(DISPONIBLE)
-  descripcion           String          @default("")
-  ubicacion             String          @default("")
-  fecha_compra          DateTime?       @db.Date
-  valor_compra          Decimal?        @db.Decimal(14, 2)
-  proximo_mantenimiento DateTime?       @db.Date
+  tipo                  EquipmentTipo?
+  marca                 String              @default("")
+  modelo                String              @default("")
+  serial                String              @default("")
+  estado                EquipmentEstado     @default(DISPONIBLE)
+  descripcion           String              @default("")
+  ubicacion             String              @default("")
+  fecha_compra          DateTime?           @db.Date
+  valor_compra          Decimal?            @db.Decimal(14, 2)
+  proximo_mantenimiento DateTime?           @db.Date
   proyecto_actual_id    Int?
-  created_at            DateTime        @default(now()) @db.Timestamptz(6)
-  geo_projects          GeoProject?     @relation(fields: [proyecto_actual_id], references: [id], onUpdate: NoAction)
+  categoria_id          Int?
+  subtipo_id            Int?
+  identificador         String?
+  factura_archivo       String              @default("")
+  foto1                 String              @default("")
+  foto2                 String              @default("")
+  foto3                 String              @default("")
+  created_at            DateTime            @default(now()) @db.Timestamptz(6)
+  geo_projects          GeoProject?         @relation(fields: [proyecto_actual_id], references: [id], onUpdate: NoAction)
+  equipment_categorias  EquipmentCategoria? @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
+  equipment_subtipos    EquipmentSubtipo?   @relation(fields: [subtipo_id], references: [id], onUpdate: NoAction)
   equipment_logs        EquipmentLog[]
   invoices              invoices[]
 
   @@index([estado])
   @@index([proyecto_actual_id], map: "equipment_proyecto_idx")
   @@index([tipo])
+  @@index([categoria_id], map: "equipment_categoria_idx")
+  @@index([subtipo_id], map: "equipment_subtipo_idx")
   @@map("equipment")
+}
+
+model EquipmentCategoria {
+  id                 Int                @id @default(autoincrement())
+  nombre             String             @unique
+  prefijo            String             @default("EQ")
+  icono              String             @default("📦")
+  orden              Int                @default(0)
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  equipment          Equipment[]
+  equipment_subtipos EquipmentSubtipo[]
+
+  @@map("equipment_categorias")
+}
+
+model EquipmentSubtipo {
+  id                   Int                @id @default(autoincrement())
+  categoria_id         Int
+  nombre               String
+  orden                Int                @default(0)
+  created_at           DateTime           @default(now()) @db.Timestamptz(6)
+  equipment_categorias EquipmentCategoria @relation(fields: [categoria_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  equipment            Equipment[]
+
+  @@unique([categoria_id, nombre])
+  @@index([categoria_id], map: "equipment_subtipos_categoria_idx")
+  @@map("equipment_subtipos")
 }
 
 model EquipmentLog {
@@ -401,36 +439,36 @@ enum InvoiceTipo {
 }
 
 model Reminder {
-  id              Int           @id @default(autoincrement())
-  titulo          String
-  mensaje         String
-  tipo            ReminderTipo  @default(GENERAL)
+  id      Int          @id @default(autoincrement())
+  titulo  String
+  mensaje String
+  tipo    ReminderTipo @default(GENERAL)
 
   destinatario_id Int?
-  destinatario    User?         @relation("RemDestinatario", fields: [destinatario_id], references: [id], onUpdate: NoAction)
-  telefono_manual String        @default("")
+  destinatario    User?  @relation("RemDestinatario", fields: [destinatario_id], references: [id], onUpdate: NoAction)
+  telefono_manual String @default("")
 
-  frecuencia      ReminderFrec
-  intervalo_dias  Int?
-  dia_semana      Int?
-  dia_mes         Int?
-  hora            String        @default("09:00")
+  frecuencia     ReminderFrec
+  intervalo_dias Int?
+  dia_semana     Int?
+  dia_mes        Int?
+  hora           String       @default("09:00")
 
-  fecha_inicio    DateTime      @db.Date
-  fecha_caducidad DateTime?     @db.Date
-  proximo_envio   DateTime      @db.Timestamptz(6)
-  ultimo_envio    DateTime?     @db.Timestamptz(6)
-  veces_enviado   Int           @default(0)
+  fecha_inicio    DateTime  @db.Date
+  fecha_caducidad DateTime? @db.Date
+  proximo_envio   DateTime  @db.Timestamptz(6)
+  ultimo_envio    DateTime? @db.Timestamptz(6)
+  veces_enviado   Int       @default(0)
 
-  activo          Boolean       @default(true)
-  pausado         Boolean       @default(false)
+  activo  Boolean @default(true)
+  pausado Boolean @default(false)
 
-  creado_por_id   Int?
-  creado_por      User?         @relation("RemCreador", fields: [creado_por_id], references: [id], onUpdate: NoAction)
-  created_at      DateTime      @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  creado_por_id Int?
+  creado_por    User?    @relation("RemCreador", fields: [creado_por_id], references: [id], onUpdate: NoAction)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
 
-  logs            ReminderLog[]
+  logs ReminderLog[]
 
   @@index([destinatario_id])
   @@index([creado_por_id])

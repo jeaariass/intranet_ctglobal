@@ -33,6 +33,18 @@ router.get("/", authMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Usuarios desactivados (solo admin). Debe ir ANTES de "/:id".
+router.get("/inactivos", authMiddleware, adminMiddleware, async (req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { activo: false },
+      select: SAFE_SELECT,
+      orderBy: { nombre: "asc" },
+    });
+    res.json(users);
+  } catch (e) { next(e); }
+});
+
 router.get("/:id", authMiddleware, async (req, res, next) => {
   try {
     const user = await prisma.user.findFirst({
@@ -131,6 +143,17 @@ router.delete("/:id", authMiddleware, adminMiddleware, async (req, res, next) =>
   try {
     await prisma.user.update({ where: { id: +req.params.id }, data: { activo: false } });
     res.json({ message: "Usuario desactivado" });
+  } catch (e) { next(e); }
+});
+
+router.patch("/:id/reactivar", authMiddleware, adminMiddleware, async (req, res, next) => {
+  try {
+    const user = await prisma.user.update({
+      where: { id: +req.params.id },
+      data: { activo: true },
+      select: SAFE_SELECT,
+    });
+    res.json({ message: "Usuario reactivado", user });
   } catch (e) { next(e); }
 });
 
