@@ -1,5 +1,5 @@
 // frontend/src/pages/Equipment.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { format } from "date-fns";
@@ -7,6 +7,7 @@ import { es } from "date-fns/locale";
 import {
   Receipt, ExternalLink, AlertTriangle, Eye, Download, X,
   Pencil, RefreshCw, FolderCog, FileSpreadsheet, Trash2, Plus,
+  ImagePlus, FileText, Undo2, UploadCloud,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -79,6 +80,159 @@ const emptyForm = {
   descripcion:"", ubicacion:"", fechaCompra:"", valorCompra:"", proximoMantenimiento:"",
   foto1:null, foto2:null, foto3:null, factura:null,
 };
+
+// ── Slot de foto: dropzone + preview, no se reinicia al escribir en el form ──
+function PhotoSlot({ label, file, existingUrl, onPick, onClearStaged, onDeleteExisting, onView }) {
+  const inputRef = useRef(null);
+  const [preview, setPreview] = useState(null);
+
+  useEffect(() => {
+    if (!file) { setPreview(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const shown = preview || existingUrl;
+  const pick  = () => inputRef.current?.click();
+
+  return (
+    <div className="eq-slot">
+      {shown ? (
+        <>
+          <img className="eq-slot-img" src={shown} alt={label}
+            onClick={() => onView(shown)} />
+          <div className="eq-slot-actions">
+            <button type="button" title="Ver" onClick={() => onView(shown)}><Eye size={14} /></button>
+            <button type="button" title="Cambiar" onClick={pick}><ImagePlus size={14} /></button>
+            {file ? (
+              <button type="button" title="Deshacer" onClick={onClearStaged}><Undo2 size={14} /></button>
+            ) : (
+              <button type="button" title="Quitar" className="danger" onClick={onDeleteExisting}><Trash2 size={14} /></button>
+            )}
+          </div>
+          {file && <span className="eq-slot-tag">nueva</span>}
+        </>
+      ) : (
+        <button type="button" className="eq-slot-drop" onClick={pick}>
+          <ImagePlus size={20} />
+          <span>{label}</span>
+        </button>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onPick(f);
+          e.target.value = "";
+        }} />
+    </div>
+  );
+}
+
+// ── Slot de factura: PDF o imagen ───────────────────────────
+function FacturaSlot({ file, existingUrl, existingName, onPick, onClearStaged, onView }) {
+  const inputRef = useRef(null);
+  const [preview, setPreview] = useState(null);
+  const isImg = file ? file.type.startsWith("image/")
+    : /\.(png|jpe?g|webp|gif)$/i.test(existingName || existingUrl || "");
+
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image/")) { setPreview(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const has  = !!file || !!existingUrl;
+  const pick = () => inputRef.current?.click();
+  const viewUrl = file && !isImg ? null : (preview || existingUrl);
+
+  return (
+    <div className="eq-slot eq-slot--wide">
+      {has ? (
+        <>
+          {isImg && viewUrl ? (
+            <img className="eq-slot-img" src={viewUrl} alt="Factura" onClick={() => viewUrl && onView(viewUrl)} />
+          ) : (
+            <button type="button" className="eq-slot-file" onClick={() => existingUrl && onView(existingUrl)}>
+              <FileText size={22} />
+              <span>{file ? file.name : "Factura de compra"}</span>
+            </button>
+          )}
+          <div className="eq-slot-actions">
+            {(isImg ? viewUrl : existingUrl) && (
+              <button type="button" title="Ver" onClick={() => onView(isImg ? viewUrl : existingUrl)}><Eye size={14} /></button>
+            )}
+            <button type="button" title="Cambiar" onClick={pick}><UploadCloud size={14} /></button>
+            {file && <button type="button" title="Deshacer" onClick={onClearStaged}><Undo2 size={14} /></button>}
+          </div>
+          {file && <span className="eq-slot-tag">nueva</span>}
+        </>
+      ) : (
+        <button type="button" className="eq-slot-drop" onClick={pick}>
+          <UploadCloud size={20} />
+          <span>Factura de compra</span>
+          <small>PDF o imagen</small>
+        </button>
+      )}
+      <input ref={inputRef} type="file" accept="application/pdf,image/*" hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onPick(f);
+          e.target.value = "";
+        }} />
+    </div>
+  );
+}
+
+const EQ_MODAL_CSS = `
+.eq-section { margin-top: 1.25rem; }
+.eq-section-title {
+  display:flex; align-items:center; gap:.5rem;
+  font-size:.8rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--text-muted); margin:0 0 .6rem;
+}
+.eq-section-title::after { content:""; flex:1; height:1px; background:var(--border); }
+.eq-slots { display:flex; flex-wrap:wrap; gap:.75rem; }
+.eq-slot {
+  position:relative; width:132px; height:132px; border-radius:12px; overflow:hidden;
+  background:var(--bg-subtle, #f1f5f9); flex:0 0 auto;
+}
+.eq-slot--wide { width:280px; }
+.eq-slot-img { width:100%; height:100%; object-fit:cover; cursor:zoom-in; display:block; }
+.eq-slot-file {
+  width:100%; height:100%; border:none; background:linear-gradient(135deg,#eef2ff,#e0e7ff);
+  color:#4338ca; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:.4rem; cursor:pointer; padding:.5rem; text-align:center;
+}
+.eq-slot-file span { font-size:.72rem; font-weight:600; word-break:break-word; line-height:1.2; }
+.eq-slot-drop {
+  width:100%; height:100%; border:1.5px dashed var(--border);
+  background:transparent; border-radius:12px; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.35rem;
+  color:var(--text-muted); font-size:.75rem; font-weight:600; transition:all .15s;
+}
+.eq-slot-drop small { font-size:.65rem; font-weight:500; opacity:.75; }
+.eq-slot-drop:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-50,#eff6ff); }
+.eq-slot-actions {
+  position:absolute; inset:auto 0 0 0; display:flex; gap:.25rem; justify-content:center;
+  padding:.4rem; background:linear-gradient(to top, rgba(2,8,20,.78), transparent);
+  opacity:0; transition:opacity .15s;
+}
+.eq-slot:hover .eq-slot-actions { opacity:1; }
+.eq-slot-actions button {
+  width:26px; height:26px; border-radius:6px; border:none; cursor:pointer;
+  background:rgba(255,255,255,.92); color:#0f172a;
+  display:flex; align-items:center; justify-content:center;
+}
+.eq-slot-actions button:hover { background:#fff; }
+.eq-slot-actions button.danger:hover { background:#fee2e2; color:#b91c1c; }
+.eq-slot-tag {
+  position:absolute; top:.4rem; left:.4rem; font-size:.6rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em;
+  background:var(--primary,#2563eb); color:#fff; padding:.1rem .4rem; border-radius:5px;
+}
+`;
 
 // ── Modal facturas del módulo de Facturación ─────────────────
 function InvoiceModal({ equipo, onClose }) {
@@ -611,6 +765,7 @@ export default function Equipment() {
       {/* Modal crear / editar equipo */}
       {equipoModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEquipoModal(null)}>
+          <style>{EQ_MODAL_CSS}</style>
           <div className="modal" style={{ maxWidth:640 }}>
             <div className="modal-header">
               <h3>{equipoModal.mode === "create" ? "Nuevo equipo" : `Editar ${equipoModal.item.nombre}`}</h3>
@@ -700,43 +855,41 @@ export default function Equipment() {
                 </div>
 
                 {/* Fotos */}
-                <h4 style={{ margin:"0.5rem 0" }}>Fotos del equipo (hasta 3)</h4>
-                <div className="form-grid">
-                  {[1,2,3].map(n => {
-                    const campo = `foto${n}`;
-                    const actual = equipoModal.mode === "edit" ? equipoModal.item[campo] : null;
-                    return (
-                      <div className="form-group" key={n}>
-                        <label className="form-label">Foto {n}</label>
-                        {actual && !form[campo] ? (
-                          <div style={{ display:"flex", alignItems:"center", gap:"0.4rem" }}>
-                            <img src={fileUrl(actual)} alt=""
-                              onClick={() => setViewer({ url:fileUrl(actual), nombre:`Foto ${n}` })}
-                              style={{ width:48, height:48, objectFit:"cover", borderRadius:6, cursor:"pointer" }} />
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => quitarFoto(n)}>
-                              <Trash2 size={12} /> Quitar
-                            </button>
-                          </div>
-                        ) : (
-                          <input type="file" accept="image/*"
-                            onChange={e => setForm({ ...form, [campo]: e.target.files[0] || null })} />
-                        )}
-                      </div>
-                    );
-                  })}
-                  <div className="form-group">
-                    <label className="form-label">Factura de compra (PDF o imagen)</label>
-                    {equipoModal.mode === "edit" && equipoModal.item.factura_archivo && !form.factura && (
-                      <button type="button" className="btn btn-ghost btn-sm"
-                        style={{ display:"block", marginBottom:"0.3rem" }}
-                        onClick={() => setViewer({
-                          url: fileUrl(equipoModal.item.factura_archivo), nombre:"Factura de compra",
-                        })}>
-                        <Eye size={12} /> Ver factura actual
-                      </button>
-                    )}
-                    <input type="file" accept="application/pdf,image/*"
-                      onChange={e => setForm({ ...form, factura: e.target.files[0] || null })} />
+                <div className="eq-section">
+                  <h4 className="eq-section-title"><ImagePlus size={14} /> Fotos del equipo</h4>
+                  <div className="eq-slots">
+                    {[1,2,3].map(n => {
+                      const campo  = `foto${n}`;
+                      const actual = equipoModal.mode === "edit" ? equipoModal.item[campo] : null;
+                      return (
+                        <PhotoSlot
+                          key={n}
+                          label={`Foto ${n}`}
+                          file={form[campo]}
+                          existingUrl={actual ? fileUrl(actual) : null}
+                          onPick={(f) => setForm(prev => ({ ...prev, [campo]: f }))}
+                          onClearStaged={() => setForm(prev => ({ ...prev, [campo]: null }))}
+                          onDeleteExisting={() => quitarFoto(n)}
+                          onView={(url) => setViewer({ url, nombre: `Foto ${n} — ${form.nombre || "equipo"}` })}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Factura */}
+                <div className="eq-section">
+                  <h4 className="eq-section-title"><FileText size={14} /> Factura de compra</h4>
+                  <div className="eq-slots">
+                    <FacturaSlot
+                      file={form.factura}
+                      existingUrl={equipoModal.mode === "edit" && equipoModal.item.factura_archivo
+                        ? fileUrl(equipoModal.item.factura_archivo) : null}
+                      existingName={equipoModal.mode === "edit" ? equipoModal.item.factura_archivo : null}
+                      onPick={(f) => setForm(prev => ({ ...prev, factura: f }))}
+                      onClearStaged={() => setForm(prev => ({ ...prev, factura: null }))}
+                      onView={(url) => setViewer({ url, nombre: "Factura de compra" })}
+                    />
                   </div>
                 </div>
               </div>
