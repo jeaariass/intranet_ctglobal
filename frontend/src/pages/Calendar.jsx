@@ -7,7 +7,7 @@ import {
 import { es } from "date-fns/locale";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { Bell, Mail, MessageCircle, Pencil, X, Plus } from "lucide-react";
+import { Bell, Mail, MessageCircle, Pencil, X, Plus, Trash2 } from "lucide-react";
 
 const TIPOS_EVENTO = ["REUNION","CAPACITACION","FESTIVO","ENTREGA","VENCIMIENTO","LICITACION","OTRO"];
 const TIPO_COLORS  = {
@@ -177,9 +177,10 @@ export default function Calendar() {
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("¿Eliminar este evento?")) return;
+  const handleDelete = async (id, cerrar) => {
+    if (!confirm("¿Eliminar este evento? Se cancelan también sus recordatorios.")) return;
     await api.delete(`/events/${id}`);
+    if (cerrar) closeModal();
     load();
   };
 
@@ -471,11 +472,20 @@ export default function Calendar() {
                   </div>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-ghost" onClick={closeModal}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? "Guardando…" : modal === "edit" ? "Guardar cambios" : "Crear evento"}
-                </button>
+              <div className="modal-footer" style={{ justifyContent: modal === "edit" ? "space-between" : "flex-end" }}>
+                {modal === "edit" && canEdit && (
+                  <button type="button" className="btn btn-danger" disabled={saving}
+                    onClick={() => handleDelete(form.id, true)}
+                    style={{ display:"flex", alignItems:"center", gap:"0.35rem" }}>
+                    <Trash2 size={14} /> Eliminar
+                  </button>
+                )}
+                <div style={{ display:"flex", gap:"0.5rem" }}>
+                  <button type="button" className="btn btn-ghost" onClick={closeModal}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary" disabled={saving}>
+                    {saving ? "Guardando…" : modal === "edit" ? "Guardar cambios" : "Crear evento"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
