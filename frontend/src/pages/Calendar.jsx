@@ -46,6 +46,48 @@ const emptyForm = {
   destinatarios: [], canalEmail: true, canalWhatsapp: true, offsets: [1440],
 };
 
+const CAL_CSS = `
+.cal-modal input[type=checkbox]{
+  width:15px; height:15px; min-width:15px; flex:0 0 15px; margin:0;
+  accent-color:var(--primary,#2563eb); cursor:pointer;
+}
+.cal-sec { border-top:1px solid var(--border); margin-top:.75rem; padding-top:.9rem; }
+.cal-sec-title{
+  display:flex; align-items:center; gap:.4rem; margin:0 0 .7rem;
+  font-size:.72rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--text-muted);
+}
+.cal-chan{ display:flex; gap:.5rem; margin-bottom:.9rem; flex-wrap:wrap; }
+.cal-chan label{
+  display:flex; align-items:center; gap:.4rem; font-size:.82rem; cursor:pointer; user-select:none;
+  border:1px solid var(--border); border-radius:999px; padding:.32rem .8rem; transition:all .12s;
+}
+.cal-chan label.on{ background:var(--primary-50,#eff6ff); border-color:var(--primary,#2563eb); color:var(--primary,#1d4ed8); font-weight:600; }
+.cal-field-label{ font-size:.72rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; display:block; margin-bottom:.4rem; }
+.cal-off{ display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.6rem; }
+.cal-off label{
+  display:flex; align-items:center; gap:.4rem; font-size:.78rem; cursor:pointer; user-select:none;
+  border:1px solid var(--border); border-radius:7px; padding:.3rem .6rem; transition:all .12s;
+}
+.cal-off label.on{ background:var(--primary-50,#eff6ff); border-color:var(--primary,#2563eb); }
+.cal-custom{ display:flex; gap:.4rem; align-items:center; margin-bottom:.9rem; flex-wrap:wrap; }
+.cal-custom input{ width:64px; }
+.cal-custom select{ width:96px; }
+.cal-recip{
+  max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:#fff;
+}
+.cal-recip .cal-row{
+  display:flex; align-items:center; gap:.65rem; padding:.5rem .7rem; cursor:pointer;
+  border-bottom:1px solid var(--border); font-size:.85rem; transition:background .1s;
+}
+.cal-recip .cal-row:last-child{ border-bottom:none; }
+.cal-recip .cal-row:hover{ background:var(--primary-50,#f8fafc); }
+.cal-recip .cal-row.on{ background:var(--primary-50,#eff6ff); }
+.cal-recip .cal-name{ font-weight:500; color:var(--text); }
+.cal-recip .cal-sub{ margin-left:auto; color:var(--text-muted); font-size:.72rem; white-space:nowrap; }
+.cal-chips{ display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.6rem; }
+.cal-selected{ font-size:.75rem; color:var(--text-muted); margin:.5rem 0 .4rem; }
+`;
+
 export default function Calendar() {
   const { user } = useAuth();
   const [events, setEvents]           = useState([]);
@@ -306,7 +348,8 @@ export default function Calendar() {
       {/* Modal crear / editar evento */}
       {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
-          <div className="modal" style={{ maxWidth:560 }}>
+          <style>{CAL_CSS}</style>
+          <div className="modal cal-modal" style={{ maxWidth:560 }}>
             <div className="modal-header">
               <h3>{modal === "edit" ? "Editar evento" : "Nuevo evento"}</h3>
               <button className="btn btn-ghost btn-sm" onClick={closeModal}>✕</button>
@@ -344,32 +387,27 @@ export default function Calendar() {
                 </div>
 
                 {/* Recordatorios */}
-                <div style={{ borderTop:"1px solid var(--border)", margin:"0.5rem 0 0.75rem", paddingTop:"0.75rem" }}>
-                  <h4 style={{ display:"flex", alignItems:"center", gap:"0.4rem", fontSize:"0.8rem",
-                    textTransform:"uppercase", letterSpacing:"0.04em", color:"var(--text-muted)", margin:"0 0 0.6rem" }}>
-                    <Bell size={14} /> Recordatorios
-                  </h4>
+                <div className="cal-sec">
+                  <h4 className="cal-sec-title"><Bell size={13} /> Recordatorios</h4>
 
-                  <div style={{ display:"flex", gap:"1rem", marginBottom:"0.75rem", flexWrap:"wrap" }}>
-                    <label style={{ display:"flex", alignItems:"center", gap:"0.4rem", fontSize:"0.85rem", cursor:"pointer" }}>
+                  <span className="cal-field-label">Enviar por</span>
+                  <div className="cal-chan">
+                    <label className={form.canalEmail ? "on" : ""}>
                       <input type="checkbox" checked={form.canalEmail}
                         onChange={e => setForm({ ...form, canalEmail:e.target.checked })} />
-                      <Mail size={14} /> Correo
+                      <Mail size={13} /> Correo
                     </label>
-                    <label style={{ display:"flex", alignItems:"center", gap:"0.4rem", fontSize:"0.85rem", cursor:"pointer" }}>
+                    <label className={form.canalWhatsapp ? "on" : ""}>
                       <input type="checkbox" checked={form.canalWhatsapp}
                         onChange={e => setForm({ ...form, canalWhatsapp:e.target.checked })} />
-                      <MessageCircle size={14} /> WhatsApp
+                      <MessageCircle size={13} /> WhatsApp
                     </label>
                   </div>
 
-                  <label className="form-label">Antelación</label>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:"0.4rem", marginBottom:"0.5rem" }}>
+                  <span className="cal-field-label">Antelación</span>
+                  <div className="cal-off">
                     {OFFSETS.map(o => (
-                      <label key={o.min}
-                        style={{ display:"flex", alignItems:"center", gap:"0.3rem", fontSize:"0.8rem",
-                          border:"1px solid var(--border)", borderRadius:6, padding:"0.25rem 0.5rem", cursor:"pointer",
-                          background: form.offsets.includes(o.min) ? "var(--primary-50,#eff6ff)" : "transparent" }}>
+                      <label key={o.min} className={form.offsets.includes(o.min) ? "on" : ""}>
                         <input type="checkbox" checked={form.offsets.includes(o.min)}
                           onChange={() => setForm(f => ({ ...f, offsets: toggle(f.offsets, o.min) }))} />
                         {o.label}
@@ -377,15 +415,14 @@ export default function Calendar() {
                     ))}
                   </div>
 
-                  {/* Personalizadas ya agregadas (no predefinidas) */}
                   {form.offsets.filter(m => !OFFSETS.some(o => o.min === m)).length > 0 && (
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:"0.35rem", marginBottom:"0.5rem" }}>
+                    <div className="cal-chips">
                       {form.offsets.filter(m => !OFFSETS.some(o => o.min === m)).map(m => (
                         <span key={m} className="badge badge-blue"
                           style={{ display:"inline-flex", alignItems:"center", gap:"0.3rem" }}>
                           {etiquetaOffset(m)}
                           <button type="button" onClick={() => setForm(f => ({ ...f, offsets: f.offsets.filter(x => x !== m) }))}
-                            style={{ background:"none", border:"none", cursor:"pointer", padding:0, color:"inherit", lineHeight:1 }}>
+                            style={{ background:"none", border:"none", cursor:"pointer", padding:0, color:"inherit", lineHeight:1, display:"flex" }}>
                             <X size={11} />
                           </button>
                         </span>
@@ -393,40 +430,43 @@ export default function Calendar() {
                     </div>
                   )}
 
-                  <div style={{ display:"flex", gap:"0.35rem", alignItems:"center", marginBottom:"0.75rem" }}>
-                    <span style={{ fontSize:"0.78rem", color:"var(--text-muted)" }}>Otra:</span>
-                    <input type="number" min="1" value={custom.val} placeholder="Ej. 4" style={{ width:70 }}
+                  <div className="cal-custom">
+                    <span style={{ fontSize:"0.8rem", color:"var(--text-muted)" }}>Otra antelación:</span>
+                    <input type="number" min="1" value={custom.val} placeholder="Nº"
                       onChange={e => setCustom({ ...custom, val:e.target.value })} />
-                    <select value={custom.unit} onChange={e => setCustom({ ...custom, unit:e.target.value })} style={{ width:100 }}>
+                    <select value={custom.unit} onChange={e => setCustom({ ...custom, unit:e.target.value })}>
                       {Object.keys(UNIDADES).map(u => <option key={u} value={u}>{u}</option>)}
                     </select>
-                    <button type="button" className="btn btn-outline btn-sm" onClick={addCustomOffset}>Agregar</button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={addCustomOffset}>
+                      <Plus size={13} /> Agregar
+                    </button>
                   </div>
 
-                  <label className="form-label">Notificar a</label>
+                  <span className="cal-field-label">
+                    Notificar a {form.destinatarios.length > 0 && `(${form.destinatarios.length})`}
+                  </span>
                   {form.destinatarios.length > 0 && (
-                    <div style={{ fontSize:"0.72rem", color:"var(--text-muted)", marginBottom:"0.35rem" }}>
-                      {form.destinatarios.map(nombreUser).join(", ")}
-                    </div>
+                    <div className="cal-selected">{form.destinatarios.map(nombreUser).join(" · ")}</div>
                   )}
                   <input placeholder="Buscar usuario…" value={userSearch}
-                    onChange={e => setUserSearch(e.target.value)} style={{ marginBottom:"0.35rem" }} />
-                  <div style={{ maxHeight:150, overflowY:"auto", border:"1px solid var(--border)", borderRadius:6, padding:"0.35rem" }}>
-                    {usuariosFiltrados.map(u => (
-                      <label key={u.id}
-                        style={{ display:"flex", alignItems:"center", gap:"0.5rem", fontSize:"0.82rem",
-                          padding:"0.2rem 0.15rem", cursor:"pointer" }}>
-                        <input type="checkbox" checked={form.destinatarios.includes(u.id)}
-                          onChange={() => setForm(f => ({ ...f, destinatarios: toggle(f.destinatarios, u.id) }))} />
-                        {u.nombre} {u.apellido}
-                        <span style={{ color:"var(--text-muted)", fontSize:"0.72rem" }}>{u.area || u.email}</span>
-                      </label>
-                    ))}
+                    onChange={e => setUserSearch(e.target.value)} style={{ marginBottom:"0.4rem" }} />
+                  <div className="cal-recip">
+                    {usuariosFiltrados.map(u => {
+                      const on = form.destinatarios.includes(u.id);
+                      return (
+                        <label key={u.id} className={`cal-row ${on ? "on" : ""}`}>
+                          <input type="checkbox" checked={on}
+                            onChange={() => setForm(f => ({ ...f, destinatarios: toggle(f.destinatarios, u.id) }))} />
+                          <span className="cal-name">{u.nombre} {u.apellido}</span>
+                          <span className="cal-sub">{u.area || u.email}</span>
+                        </label>
+                      );
+                    })}
                     {usuariosFiltrados.length === 0 && (
-                      <div style={{ fontSize:"0.75rem", color:"var(--text-muted)", padding:"0.3rem" }}>Sin resultados</div>
+                      <div style={{ fontSize:"0.78rem", color:"var(--text-muted)", padding:"0.6rem" }}>Sin resultados</div>
                     )}
                   </div>
-                  <div style={{ fontSize:"0.7rem", color:"var(--text-muted)", marginTop:"0.3rem" }}>
+                  <div style={{ fontSize:"0.7rem", color:"var(--text-muted)", marginTop:"0.4rem" }}>
                     El correo y el WhatsApp se toman del perfil de cada usuario.
                   </div>
                 </div>
