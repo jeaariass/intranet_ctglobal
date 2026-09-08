@@ -111,7 +111,9 @@ function PhotoSlot({ label, file, existingUrl, onPick, onClearStaged, onDeleteEx
               <button type="button" title="Quitar" className="danger" onClick={onDeleteExisting}><Trash2 size={14} /></button>
             )}
           </div>
-          {file && <span className="eq-slot-tag">nueva</span>}
+          <span className={file ? "eq-slot-tag" : "eq-slot-tag eq-slot-tag--ok"}>
+            {file ? "nueva" : "cargada"}
+          </span>
         </>
       ) : (
         <button type="button" className="eq-slot-drop" onClick={pick}>
@@ -130,6 +132,9 @@ function PhotoSlot({ label, file, existingUrl, onPick, onClearStaged, onDeleteEx
 }
 
 // ── Slot de factura: PDF o imagen ───────────────────────────
+// Quita el prefijo timestamp que añade el backend (1712345678_archivo.pdf)
+const limpiarNombre = (s) => String(s || "").replace(/^\d{10,}_/, "");
+
 function FacturaSlot({ file, existingUrl, existingName, onPick, onClearStaged, onView }) {
   const inputRef = useRef(null);
   const [preview, setPreview] = useState(null);
@@ -143,9 +148,10 @@ function FacturaSlot({ file, existingUrl, existingName, onPick, onClearStaged, o
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const has  = !!file || !!existingUrl;
-  const pick = () => inputRef.current?.click();
+  const has     = !!file || !!existingUrl;
+  const pick    = () => inputRef.current?.click();
   const viewUrl = file && !isImg ? null : (preview || existingUrl);
+  const nombre  = file ? file.name : limpiarNombre(existingName) || "Factura cargada";
 
   return (
     <div className="eq-slot eq-slot--wide">
@@ -156,7 +162,7 @@ function FacturaSlot({ file, existingUrl, existingName, onPick, onClearStaged, o
           ) : (
             <button type="button" className="eq-slot-file" onClick={() => existingUrl && onView(existingUrl)}>
               <FileText size={22} />
-              <span>{file ? file.name : "Factura de compra"}</span>
+              <span>{nombre}</span>
             </button>
           )}
           <div className="eq-slot-actions">
@@ -166,7 +172,8 @@ function FacturaSlot({ file, existingUrl, existingName, onPick, onClearStaged, o
             <button type="button" title="Cambiar" onClick={pick}><UploadCloud size={14} /></button>
             {file && <button type="button" title="Deshacer" onClick={onClearStaged}><Undo2 size={14} /></button>}
           </div>
-          {file && <span className="eq-slot-tag">nueva</span>}
+          {isImg && <span className="eq-slot-name" title={nombre}>{nombre}</span>}
+          <span className="eq-slot-tag">{file ? "nueva" : "cargada"}</span>
         </>
       ) : (
         <button type="button" className="eq-slot-drop" onClick={pick}>
@@ -206,6 +213,12 @@ const EQ_MODAL_CSS = `
   gap:.4rem; cursor:pointer; padding:.5rem; text-align:center;
 }
 .eq-slot-file span { font-size:.72rem; font-weight:600; word-break:break-word; line-height:1.2; }
+.eq-slot-name {
+  position:absolute; left:0; right:0; bottom:0; padding:.3rem .5rem;
+  font-size:.66rem; font-weight:600; color:#fff;
+  background:linear-gradient(to top, rgba(2,8,20,.82), transparent);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
 .eq-slot-drop {
   width:100%; height:100%; border:1.5px dashed var(--border);
   background:transparent; border-radius:12px; cursor:pointer;
@@ -229,9 +242,10 @@ const EQ_MODAL_CSS = `
 .eq-slot-actions button.danger:hover { background:#fee2e2; color:#b91c1c; }
 .eq-slot-tag {
   position:absolute; top:.4rem; left:.4rem; font-size:.6rem; font-weight:700;
-  text-transform:uppercase; letter-spacing:.04em;
+  text-transform:uppercase; letter-spacing:.04em; z-index:1;
   background:var(--primary,#2563eb); color:#fff; padding:.1rem .4rem; border-radius:5px;
 }
+.eq-slot-tag--ok { background:#16a34a; }
 `;
 
 // ── Modal facturas del módulo de Facturación ─────────────────
