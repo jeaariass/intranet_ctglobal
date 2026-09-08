@@ -69,6 +69,34 @@ async function enviarWhatsApp({ to, mensaje, tipo, destinatarioId }) {
 }
 
 /**
+ * Envía un correo delegando en el mailer de T_INTRANET (SMTP configurado allí).
+ *
+ * @param {object} opts
+ * @param {string} opts.to      email destino
+ * @param {string} opts.subject asunto
+ * @param {string} opts.html    cuerpo HTML
+ * @param {string} [opts.tipo]  tag para el log
+ * @returns {Promise<{exito:boolean, error?:string}>}
+ */
+async function enviarEmail({ to, subject, html, tipo }) {
+  if (!URL || !TOKEN) return { exito: false, error: "TRAMITES_NOTIF_URL o TRAMITES_SERVICE_TOKEN no configurados" };
+  if (!to)   return { exito: false, error: "Sin email destino" };
+  try {
+    const emailUrl = URL.replace(/\/whatsapp$/, "/email");
+    const res = await axios.post(
+      emailUrl,
+      { to, subject, html, tipo: tipo || "INTRANET_EVENTO" },
+      { headers: { "Content-Type": "application/json", "x-service-token": TOKEN }, timeout: 15_000 }
+    );
+    return { exito: !!res.data?.exito, error: res.data?.error || "" };
+  } catch (e) {
+    const msg = e.response?.data?.error || e.message || String(e);
+    console.error("[whatsappClient] error enviando email:", msg);
+    return { exito: false, error: msg };
+  }
+}
+
+/**
  * Ping al endpoint de T_INTRANET. Útil para health checks.
  */
 async function ping() {
@@ -104,4 +132,4 @@ async function estadoWhatsApp() {
   }
 }
 
-module.exports = { enviarWhatsApp, ping, estadoWhatsApp };
+module.exports = { enviarWhatsApp, enviarEmail, ping, estadoWhatsApp };

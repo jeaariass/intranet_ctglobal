@@ -9,7 +9,7 @@
 
 const cron     = require("node-cron");
 const prisma   = require("./prisma");
-const { enviarWhatsApp } = require("./whatsappClient");
+const { enviarWhatsApp, enviarEmail } = require("./whatsappClient");
 
 const TZ = process.env.TZ || "America/Bogota";
 
@@ -244,17 +244,125 @@ async function tick() {
   }
 }
 
+// ════════════════════════════════════════════════════════════
+//  RECORDATORIOS DE EVENTOS DEL CALENDARIO
+// ════════════════════════════════════════════════════════════
+
+const MIN = { SEMANA: 10080, D3: 4320, D2: 2880, D1: 1440, H1: 60, MIN30: 30 };
+
+function etiquetaOffset(min) {
+  if (min === MIN.SEMANA) return "en 1 semana";
+  if (min % 1440 === 0)   return `en ${min / 1440} día${min / 1440 === 1 ? "" : "s"}`;
+  if (min % 60 === 0)     return `en ${min / 60} hora${min / 60 === 1 ? "" : "s"}`;
+  return `en ${min} minuto${min === 1 ? "" : "s"}`;
+}
+
+function fmtFechaEvento(d) {
+  return new Date(d).toLocaleString("es-CO", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZone: TZ,
+  });
+}
+
+async function enviarEventoRecordatorio(er, offset) {
+  const ev = er.event;
+  const cuando = etiquetaOffset(offset);
+  const fechaTxt = fmtFechaEvento(ev.fecha_inicio);
+
+  const destinatarios = er.destinatarios.length
+    ? await prisma.user.findMany({
+        where: { id: { in: er.destinatarios }, activo: true },
+        select: { id: true, nombre: true, email: true, telefono_whatsapp: true },
+      })
+    : [];
+
+  const textoWA =
+    `🗓️ *Recordatorio: ${ev.titulo}*\n` +
+    `El evento es ${cuando} — ${fechaTxt}.` +
+    (ev.descripcion ? `\n\n${ev.descripcion}` : "");
+
+  const html =
+    `<p>Hola {NOMBRE},</p>` +
+    `<p>Te recordamos el evento <b>${ev.titulo}</b>.</p>` +
+    `<p><b>Cuándo:</b> ${cuando} — ${fechaTxt}</p>` +
+    (ev.descripcion ? `<p><b>Detalle:</b> ${ev.descripcion}</p>` : "") +
+    `<p style="color:#64748b;font-size:12px">Calendario CTGlobal · intranet.ctglobal.com.co/calendario</p>`;
+  const subject = `Recordatorio: ${ev.titulo} (${cuando})`;
+
+  let ok = 0, fail = 0;
+  for (const u of destinatarios) {
+    if (er.canal_whatsapp && u.telefono_whatsapp) {
+      const r = await enviarWhatsApp({
+        to: u.telefono_whatsapp.trim(), mensaje: textoWA,
+        tipo: "INTRANET_EVENTO", destinatarioId: u.id,
+      });
+      r.exito ? ok++ : fail++;
+    }
+    if (er.canal_email && u.email) {
+      const r = await enviarEmail({
+        to: u.email, subject, html: html.replace("{NOMBRE}", u.nombre || ""),
+        tipo: "INTRANET_EVENTO",
+      });
+      r.exito ? ok++ : fail++;
+    }
+  }
+  console.log(`[scheduler-eventos] evento #${ev.id} "${ev.titulo}" ${cuando} → ${ok} ok, ${fail} fallo(s), ${destinatarios.length} destinatario(s)`);
+}
+
+let _runningEv = false;
+
+async function tickEventos() {
+  if (_runningEv) return;
+  _runningEv = true;
+  try {
+    const now = new Date();
+    const ers = await prisma.eventReminder.findMany({
+      where: {
+        OR: [{ canal_email: true }, { canal_whatsapp: true }],
+        event: { fecha_inicio: { gte: now } },
+      },
+      include: { event: true },
+    });
+
+    for (const er of ers) {
+      const pendientes = er.offsets_min.filter(o =>
+        !er.enviados_min.includes(o) &&
+        new Date(er.event.fecha_inicio.getTime() - o * 60000) <= now
+      );
+      if (!pendientes.length) continue;
+
+      for (const off of pendientes) {
+        try { await enviarEventoRecordatorio(er, off); }
+        catch (e) { console.error(`[scheduler-eventos] error evento #${er.event_id} offset ${off}:`, e.message); }
+      }
+      await prisma.eventReminder.update({
+        where: { id: er.id },
+        data:  { enviados_min: { set: [...new Set([...er.enviados_min, ...pendientes])] } },
+      });
+    }
+  } catch (e) {
+    console.error("[scheduler-eventos] error en tick:", e.message);
+  } finally {
+    _runningEv = false;
+  }
+}
+
+// ── Arranque ────────────────────────────────────────────────
+
 let _task = null;
+let _taskEv = null;
 
 function startScheduler() {
   if (_task) return;
   // Cada minuto. Zona horaria explícita para que "09:00" signifique 09:00 Bogotá.
-  _task = cron.schedule("* * * * *", tick, { timezone: TZ });
-  console.log(`[scheduler] iniciado (cada minuto, TZ=${TZ})`);
+  _task   = cron.schedule("* * * * *", tick, { timezone: TZ });
+  _taskEv = cron.schedule("* * * * *", tickEventos, { timezone: TZ });
+  console.log(`[scheduler] iniciado (recordatorios + eventos, cada minuto, TZ=${TZ})`);
 }
 
 function stopScheduler() {
-  if (_task) { _task.stop(); _task = null; }
+  if (_task)   { _task.stop();   _task = null; }
+  if (_taskEv) { _taskEv.stop(); _taskEv = null; }
 }
 
 module.exports = {
@@ -262,7 +370,9 @@ module.exports = {
   stopScheduler,
   calcularProximoEnvio,
   calcularProximoInicial,
+  etiquetaOffset,
   // exportado para tests
   _procesar: procesar,
   _tick: tick,
+  _tickEventos: tickEventos,
 };
