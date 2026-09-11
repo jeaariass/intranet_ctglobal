@@ -187,6 +187,9 @@ model Equipment {
   foto1                 String              @default("")
   foto2                 String              @default("")
   foto3                 String              @default("")
+  vida_util_meses       Int?
+  valor_residual        Decimal             @default(0) @db.Decimal(14, 2)
+  depreciable           Boolean             @default(true)
   created_at            DateTime            @default(now()) @db.Timestamptz(6)
   geo_projects          GeoProject?         @relation(fields: [proyecto_actual_id], references: [id], onUpdate: NoAction)
   equipment_categorias  EquipmentCategoria? @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)

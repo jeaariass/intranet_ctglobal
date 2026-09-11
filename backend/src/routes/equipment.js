@@ -501,6 +501,9 @@ router.post("/", authMiddleware, editorMiddleware, uploadFields, async (req, res
         foto2:                 f.foto2?.[0]?.filename   || "",
         foto3:                 f.foto3?.[0]?.filename   || "",
         factura_archivo:       f.factura?.[0]?.filename || "",
+        vida_util_meses:       d.vidaUtilMeses ? +d.vidaUtilMeses : null,
+        valor_residual:        d.valorResidual ? +d.valorResidual : 0,
+        depreciable:           !(d.depreciable === "false" || d.depreciable === false),
       },
     });
     res.status(201).json(item);
@@ -535,7 +538,10 @@ router.put("/:id", authMiddleware, editorMiddleware, uploadFields, async (req, r
       proximo_mantenimiento: d.proximoMantenimiento ? new Date(d.proximoMantenimiento) : null,
       proyecto_actual_id:    d.proyectoActualId     ? +d.proyectoActualId              : null,
     };
-    if (d.identificador !== undefined) data.identificador = d.identificador.trim() || null;
+    if (d.identificador  !== undefined) data.identificador   = d.identificador.trim() || null;
+    if (d.vidaUtilMeses  !== undefined) data.vida_util_meses = d.vidaUtilMeses ? +d.vidaUtilMeses : null;
+    if (d.valorResidual  !== undefined) data.valor_residual  = d.valorResidual ? +d.valorResidual : 0;
+    if (d.depreciable    !== undefined) data.depreciable     = !(d.depreciable === "false" || d.depreciable === false);
 
     // Reemplazo de archivos: solo si vino uno nuevo; borra el anterior
     for (const campo of ["foto1", "foto2", "foto3"]) {

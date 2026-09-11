@@ -6,7 +6,7 @@ import { es } from "date-fns/locale";
 import {
   Home, Megaphone, FolderOpen, Users, CalendarDays,
   BookOpen, Monitor, Map, BarChart2, Settings,
-  LogOut, Menu, ChevronRight, Globe, Receipt, Bell
+  LogOut, Menu, ChevronRight, Globe, Receipt, Bell, Wallet
 } from "lucide-react";
 
 const NAV_GROUPS = [
@@ -34,6 +34,7 @@ const NAV_GROUPS = [
       { to: "/geovisores",  icon: Map,           label: "Proyectos GIS" },
       { to: "/reportes",    icon: BarChart2,      label: "Reportes" },
       { to: "/facturas",    icon: Receipt,       label: "Facturación" },
+      { to: "/gastos",      icon: Wallet,        label: "Gastos" },
     ],
   },
 ];
@@ -49,6 +50,7 @@ const PAGE_TITLES = {
   "/geovisores":     "Proyectos GIS",
   "/reportes":       "Reportes",
   "/facturas":       "Facturación",
+  "/gastos":         "Gastos",
   "/recordatorios":  "Recordatorios",
   "/perfil":         "Mi Perfil",
   "/admin":          "Administración",

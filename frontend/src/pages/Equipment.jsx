@@ -78,8 +78,20 @@ const emptyForm = {
   nombre:"", categoriaId:"", subtipoId:"", identificador:"",
   marca:"", modelo:"", serial:"", estado:"DISPONIBLE",
   descripcion:"", ubicacion:"", fechaCompra:"", valorCompra:"", proximoMantenimiento:"",
+  vidaUtilMeses:"", valorResidual:"", depreciable:true,
   foto1:null, foto2:null, foto3:null, factura:null,
 };
+
+// Depreciación lineal mensual (COP). null si no aplica.
+function depMensual(e) {
+  const v = Number(e.valor_compra);
+  if (!e.depreciable || !v || !e.fecha_compra) return null;
+  const base = v - Number(e.valor_residual || 0);
+  const vida = Number(e.vida_util_meses) || 36;
+  if (base <= 0) return null;
+  return base / vida;
+}
+const cop = (n) => `$${(+n || 0).toLocaleString("es-CO", { maximumFractionDigits: 0 })}`;
 
 // ── Slot de foto: dropzone + preview, no se reinicia al escribir en el form ──
 function PhotoSlot({ label, file, existingUrl, onPick, onClearStaged, onDeleteExisting, onView }) {
@@ -339,6 +351,95 @@ function InvoiceModal({ equipo, onClose }) {
   );
 }
 
+// ── Modal detalle (solo lectura) con galería de fotos ───────
+function DetalleModal({ equipo, onView, onClose }) {
+  const fotos = [equipo.foto1, equipo.foto2, equipo.foto3].filter(Boolean);
+  const facturaEsImg = /\.(png|jpe?g|webp|gif)$/i.test(equipo.factura_archivo || "");
+
+  const Row = ({ label, value }) => value ? (
+    <div style={{ display:"flex", gap:"0.75rem", fontSize:"0.82rem", padding:"0.25rem 0" }}>
+      <span style={{ color:"var(--text-muted)", minWidth:140, flexShrink:0 }}>{label}</span>
+      <span style={{ fontWeight:500 }}>{value}</span>
+    </div>
+  ) : null;
+
+  const thumb = {
+    width:120, height:120, objectFit:"cover", borderRadius:10,
+    cursor:"zoom-in", border:"1px solid var(--border)",
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <style>{EQ_MODAL_CSS}</style>
+      <div className="modal" style={{ maxWidth:640 }}>
+        <div className="modal-header">
+          <h3 style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
+            <span>{equipo.categoria?.icono || "📦"}</span> {equipo.nombre}
+          </h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom:"0.5rem" }}>
+            <span className={`badge ${ESTADO_BADGE[equipo.estado]}`}>{ESTADO_LABEL[equipo.estado]}</span>
+          </div>
+          <Row label="Identificador" value={equipo.identificador} />
+          <Row label="Categoría" value={equipo.categoria?.nombre} />
+          <Row label="Subtipo" value={equipo.subtipo?.nombre} />
+          <Row label="Marca / Modelo" value={[equipo.marca, equipo.modelo].filter(Boolean).join(" ")} />
+          <Row label="Serial" value={equipo.serial} />
+          <Row label="Ubicación" value={equipo.ubicacion} />
+          <Row label="Proyecto actual" value={equipo.proyectoActual?.codigo} />
+          <Row label="Fecha de compra" value={equipo.fecha_compra
+            ? format(new Date(equipo.fecha_compra), "d MMM yyyy", { locale:es }) : null} />
+          <Row label="Próx. mantenimiento" value={equipo.proximo_mantenimiento
+            ? format(new Date(equipo.proximo_mantenimiento), "d MMM yyyy", { locale:es }) : null} />
+          <Row label="Valor de compra" value={equipo.valor_compra != null ? `${cop(equipo.valor_compra)} COP` : null} />
+          {depMensual(equipo) != null && (
+            <Row label="Depreciación"
+              value={`${cop(depMensual(equipo))} /mes · vida útil ${equipo.vida_util_meses || 36} meses`} />
+          )}
+          <Row label="Descripción" value={equipo.descripcion} />
+
+          <div className="eq-section">
+            <h4 className="eq-section-title"><ImagePlus size={14} /> Fotos del equipo</h4>
+            {fotos.length ? (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:"0.6rem" }}>
+                {fotos.map((f, i) => (
+                  <img key={i} src={fileUrl(f)} alt={`Foto ${i + 1}`} style={thumb}
+                    onClick={() => onView({ url:fileUrl(f), nombre:`Foto ${i + 1} — ${equipo.nombre}` })} />
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize:"0.8rem", color:"var(--text-muted)", margin:0 }}>Sin fotos cargadas.</p>
+            )}
+          </div>
+
+          <div className="eq-section">
+            <h4 className="eq-section-title"><FileText size={14} /> Factura de compra</h4>
+            {equipo.factura_archivo ? (
+              facturaEsImg ? (
+                <img src={fileUrl(equipo.factura_archivo)} alt="Factura" style={thumb}
+                  onClick={() => onView({ url:fileUrl(equipo.factura_archivo), nombre:"Factura de compra" })} />
+              ) : (
+                <button className="btn btn-outline btn-sm"
+                  style={{ display:"inline-flex", alignItems:"center", gap:"0.3rem" }}
+                  onClick={() => onView({ url:fileUrl(equipo.factura_archivo), nombre:"Factura de compra" })}>
+                  <Eye size={13} /> {limpiarNombre(equipo.factura_archivo)}
+                </button>
+              )
+            ) : (
+              <p style={{ fontSize:"0.8rem", color:"var(--text-muted)", margin:0 }}>Sin factura cargada.</p>
+            )}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Modal gestión de categorías / subtipos ──────────────────
 function CategoriasModal({ categorias, onClose, onChange }) {
   const [nuevaCat, setNuevaCat] = useState({ nombre:"", prefijo:"", icono:"📦" });
@@ -475,6 +576,7 @@ export default function Equipment() {
   const [equipoModal, setEquipoModal] = useState(null);  // { mode:"create" } | { mode:"edit", item }
   const [form, setForm]         = useState(emptyForm);
   const [showLogModal, setShowLogModal] = useState(null);
+  const [showDetalle, setShowDetalle]   = useState(null);
   const [showInvModal, setShowInvModal] = useState(null);
   const [showCatModal, setShowCatModal] = useState(false);
   const [viewer, setViewer]     = useState(null);
@@ -533,6 +635,9 @@ export default function Equipment() {
       fechaCompra: item.fecha_compra ? item.fecha_compra.slice(0,10) : "",
       valorCompra: item.valor_compra ?? "",
       proximoMantenimiento: item.proximo_mantenimiento ? item.proximo_mantenimiento.slice(0,10) : "",
+      vidaUtilMeses: item.vida_util_meses ?? "",
+      valorResidual: item.valor_residual ?? "",
+      depreciable: item.depreciable ?? true,
     });
     setEquipoModal({ mode:"edit", item });
   };
@@ -565,6 +670,9 @@ export default function Equipment() {
         fechaCompra:"fechaCompra", valorCompra:"valorCompra", proximoMantenimiento:"proximoMantenimiento",
       };
       for (const k of Object.keys(map)) if (form[k] !== "" && form[k] != null) fd.append(map[k], form[k]);
+      if (form.vidaUtilMeses !== "" && form.vidaUtilMeses != null) fd.append("vidaUtilMeses", form.vidaUtilMeses);
+      if (form.valorResidual !== "" && form.valorResidual != null) fd.append("valorResidual", form.valorResidual);
+      fd.append("depreciable", form.depreciable ? "true" : "false");
       for (const f of ["foto1","foto2","foto3","factura"]) if (form[f]) fd.append(f, form[f]);
 
       if (equipoModal.mode === "create") await api.post("/equipment", fd);
@@ -708,7 +816,7 @@ export default function Equipment() {
                 <tr>
                   <th>Equipo</th><th>Identificador</th><th>Serial</th><th>Estado</th>
                   <th>Proyecto actual</th><th>Próx. mant.</th><th>Facturas</th>
-                  {canEdit && <th>Acciones</th>}
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -757,17 +865,23 @@ export default function Equipment() {
                         <Receipt size={13} /> Ver
                       </button>
                     </td>
-                    {canEdit && (
-                      <td style={{ whiteSpace:"nowrap" }}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openEdit(item)}
-                          style={{ display:"inline-flex", alignItems:"center", gap:"0.3rem" }}>
-                          <Pencil size={13} /> Editar
-                        </button>
-                        <button className="btn btn-outline btn-sm" onClick={() => setShowLogModal(item.id)}>
-                          Movimiento
-                        </button>
-                      </td>
-                    )}
+                    <td style={{ whiteSpace:"nowrap" }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setShowDetalle(item)}
+                        style={{ display:"inline-flex", alignItems:"center", gap:"0.3rem" }}>
+                        <Eye size={13} /> Ver
+                      </button>
+                      {canEdit && (
+                        <>
+                          <button className="btn btn-ghost btn-sm" onClick={() => openEdit(item)}
+                            style={{ display:"inline-flex", alignItems:"center", gap:"0.3rem" }}>
+                            <Pencil size={13} /> Editar
+                          </button>
+                          <button className="btn btn-outline btn-sm" onClick={() => setShowLogModal(item.id)}>
+                            Movimiento
+                          </button>
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -860,7 +974,27 @@ export default function Equipment() {
                     <input type="date" value={form.proximoMantenimiento}
                       onChange={e => setForm({ ...form, proximoMantenimiento:e.target.value })} />
                   </div>
+                  <div className="form-group">
+                    <label className="form-label">Vida útil (meses)</label>
+                    <input type="number" min="1" step="1" value={form.vidaUtilMeses}
+                      placeholder="36"
+                      onChange={e => setForm({ ...form, vidaUtilMeses:e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Valor residual</label>
+                    <input type="number" step="0.01" min="0" value={form.valorResidual}
+                      placeholder="0"
+                      onChange={e => setForm({ ...form, valorResidual:e.target.value })} />
+                  </div>
                 </div>
+
+                <label style={{ display:"flex", alignItems:"center", gap:"0.5rem",
+                  fontSize:"0.82rem", margin:"0 0 0.25rem" }}>
+                  <input type="checkbox" style={{ width:15, height:15, flex:"0 0 15px" }}
+                    checked={form.depreciable}
+                    onChange={e => setForm({ ...form, depreciable:e.target.checked })} />
+                  Depreciable (se incluye en el gasto mensual por depreciación)
+                </label>
 
                 <div className="form-group">
                   <label className="form-label">Descripción</label>
@@ -975,6 +1109,9 @@ export default function Equipment() {
         </div>
       )}
 
+      {showDetalle && (
+        <DetalleModal equipo={showDetalle} onView={setViewer} onClose={() => setShowDetalle(null)} />
+      )}
       {showInvModal && <InvoiceModal equipo={showInvModal} onClose={() => setShowInvModal(null)} />}
       {showCatModal && (
         <CategoriasModal categorias={categorias} onClose={() => setShowCatModal(false)}
