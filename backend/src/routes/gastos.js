@@ -5,6 +5,7 @@ const router   = require("express").Router();
 const multer   = require("multer");
 const path     = require("path");
 const fs       = require("fs");
+const ExcelJS  = require("exceljs");
 const { Pool } = require("pg");
 const { authMiddleware, editorMiddleware } = require("../middleware/auth");
 
@@ -138,6 +139,126 @@ router.get("/alerts", authMiddleware, async (req, res, next) => {
       ORDER BY g.fecha_vencimiento ASC
     `);
     res.json(rows);
+  } catch (e) { next(e); }
+});
+
+// ════════════════════════════════════════════════════════════
+//  EXPORTAR EXCEL — reporte por rango de fechas
+// ════════════════════════════════════════════════════════════
+const CAT_LABEL = {
+  RECIBO_PUBLICO: "Recibo público", ADMINISTRACION: "Administración",
+  CONTRATISTA: "Pago contratista", VUELO: "Vuelo", VIATICO: "Viático",
+  DEPRECIACION: "Depreciación", OTRO: "Otro",
+};
+
+router.get("/export.xlsx", authMiddleware, async (req, res, next) => {
+  try {
+    const { desde, hasta, categoria, estado, personaId, proyectoId } = req.query;
+    if (!desde || !hasta) return res.status(400).json({ error: "desde y hasta son requeridos" });
+
+    const conds = ["g.fecha BETWEEN $1 AND $2"];
+    const vals  = [desde, hasta];
+    let   i     = 3;
+    if (categoria)  { conds.push(`g.categoria = $${i++}`);    vals.push(categoria); }
+    if (estado)     { conds.push(`g.estado = $${i++}`);       vals.push(estado); }
+    if (personaId)  { conds.push(`g.persona_id = $${i++}`);   vals.push(+personaId); }
+    if (proyectoId) { conds.push(`g.proyecto_id = $${i++}`);  vals.push(+proyectoId); }
+
+    const rows = await q(`
+      SELECT g.*,
+        p.nombre || ' ' || p.apellido       AS persona_nombre,
+        pr.codigo                           AS proyecto_codigo,
+        pr.nombre                           AS proyecto_nombre,
+        e.nombre                            AS equipo_nombre
+      FROM gastos g
+      LEFT JOIN users       p  ON p.id  = g.persona_id
+      LEFT JOIN geo_projects pr ON pr.id = g.proyecto_id
+      LEFT JOIN equipment   e  ON e.id  = g.equipo_id
+      WHERE ${conds.join(" AND ")}
+      ORDER BY g.fecha ASC, g.id ASC
+    `, vals);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Intranet CTGlobal";
+
+    // ── Hoja detalle ──
+    const ws = wb.addWorksheet("Gastos");
+    ws.columns = [
+      { header: "Fecha",               key: "fecha",       width: 13 },
+      { header: "Categoría",           key: "categoria",   width: 18 },
+      { header: "Subcategoría",        key: "subcategoria", width: 16 },
+      { header: "Concepto",            key: "concepto",    width: 32 },
+      { header: "Proveedor / Persona", key: "quien",       width: 26 },
+      { header: "Proyecto",            key: "proyecto",    width: 20 },
+      { header: "Monto",               key: "monto",       width: 15 },
+      { header: "Moneda",              key: "moneda",      width: 10 },
+      { header: "Monto adicional",     key: "montoSec",    width: 15 },
+      { header: "Moneda adicional",    key: "monedaSec",   width: 12 },
+      { header: "Estado",              key: "estado",      width: 12 },
+      { header: "Recurrente",          key: "recurrente",  width: 22 },
+      { header: "Vence",               key: "vence",       width: 13 },
+      { header: "Notas",               key: "notas",       width: 30 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+
+    const fecha0 = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+    for (const g of rows) {
+      ws.addRow({
+        fecha:       fecha0(g.fecha),
+        categoria:   CAT_LABEL[g.categoria] || g.categoria,
+        subcategoria: g.subcategoria || "",
+        concepto:    g.concepto,
+        quien:       g.persona_nombre || g.proveedor || "",
+        proyecto:    g.proyecto_codigo || "",
+        monto:       Number(g.monto),
+        moneda:      g.moneda,
+        montoSec:    g.monto_secundario != null ? Number(g.monto_secundario) : "",
+        monedaSec:   g.moneda_secundaria || "",
+        estado:      g.estado,
+        recurrente:  g.recurrente
+          ? `${g.recurrente_tipo === "FIJO" ? "Fijo" : "Variable"} · cada ${g.intervalo_meses === 1 ? "mes" : `${g.intervalo_meses} meses`}`
+          : "",
+        vence:       fecha0(g.fecha_vencimiento),
+        notas:       g.notas || "",
+      });
+    }
+
+    // ── Hoja resumen por categoría ──
+    const wsR = wb.addWorksheet("Resumen");
+    wsR.columns = [
+      { header: "Categoría",   key: "categoria", width: 20 },
+      { header: "Registros",   key: "count",     width: 12 },
+      { header: "Total COP",   key: "cop",       width: 16 },
+      { header: "Total USD",   key: "usd",       width: 16 },
+    ];
+    wsR.getRow(1).font = { bold: true };
+
+    const porCat = {};
+    for (const g of rows) {
+      if (g.estado === "ANULADO") continue;
+      const k = g.categoria;
+      porCat[k] ||= { count: 0, cop: 0, usd: 0 };
+      porCat[k].count++;
+      if (g.moneda === "COP") porCat[k].cop += Number(g.monto);
+      if (g.moneda === "USD") porCat[k].usd += Number(g.monto);
+      if (g.moneda_secundaria === "COP") porCat[k].cop += Number(g.monto_secundario || 0);
+      if (g.moneda_secundaria === "USD") porCat[k].usd += Number(g.monto_secundario || 0);
+    }
+    let totCop = 0, totUsd = 0, totCount = 0;
+    for (const [cat, v] of Object.entries(porCat)) {
+      wsR.addRow({ categoria: CAT_LABEL[cat] || cat, count: v.count, cop: v.cop, usd: v.usd });
+      totCop += v.cop; totUsd += v.usd; totCount += v.count;
+    }
+    const totalRow = wsR.addRow({ categoria: "TOTAL", count: totCount, cop: totCop, usd: totUsd });
+    totalRow.font = { bold: true };
+    wsR.addRow({});
+    wsR.addRow({ categoria: `Período: ${desde} a ${hasta}` });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="gastos_${desde}_a_${hasta}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
   } catch (e) { next(e); }
 });
 

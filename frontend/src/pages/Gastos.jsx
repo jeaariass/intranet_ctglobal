@@ -5,7 +5,7 @@ import { es } from "date-fns/locale";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
-  Wallet, Plus, AlertTriangle, Eye, Download, X, Filter, TrendingDown,
+  Wallet, Plus, AlertTriangle, Eye, Download, X, Filter, TrendingDown, FileSpreadsheet,
 } from "lucide-react";
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || "/api").replace(/\/api\/?$/, "");
@@ -123,6 +123,15 @@ export default function Gastos() {
   const [periodo, setPeriodo] = useState({ mes:String(now.getMonth() + 1), anio:String(now.getFullYear()) });
   const [filter, setFilter]   = useState({ categoria:"", estado:"", personaId:"", proyectoId:"", q:"" });
 
+  const mesRango = (mes, anio) => {
+    const desde = new Date(anio, mes - 1, 1);
+    const hasta = new Date(anio, mes, 0);
+    const iso = (d) => d.toISOString().slice(0, 10);
+    return { desde: iso(desde), hasta: iso(hasta) };
+  };
+  const [range, setRange] = useState(mesRango(now.getMonth() + 1, now.getFullYear()));
+  const [exporting, setExporting] = useState(false);
+
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing]     = useState(null);
   const [form, setForm]           = useState(emptyForm);
@@ -177,8 +186,32 @@ export default function Gastos() {
   useEffect(() => {
     setLoading(true);
     Promise.all([loadListado(), loadDep(), loadRecurrentes(), loadContratistas()]).finally(() => setLoading(false));
+    setRange(mesRango(+periodo.mes, +periodo.anio));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo.mes, periodo.anio, filter.categoria, filter.estado, filter.personaId, filter.proyectoId, filter.q]);
+
+  const exportarExcel = async () => {
+    if (!range.desde || !range.hasta) return;
+    setExporting(true);
+    try {
+      const p = new URLSearchParams({ desde: range.desde, hasta: range.hasta });
+      if (filter.categoria)  p.set("categoria",  filter.categoria);
+      if (filter.estado)     p.set("estado",     filter.estado);
+      if (filter.personaId)  p.set("personaId",  filter.personaId);
+      if (filter.proyectoId) p.set("proyectoId", filter.proyectoId);
+      const res = await api.get(`/gastos/export.xlsx?${p}`, { responseType:"blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `gastos_${range.desde}_a_${range.hasta}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Error al generar el Excel");
+    } finally { setExporting(false); }
+  };
 
   const openNew = () => { setEditing(null); setForm(emptyForm); setFile(null); setError(""); setShowModal(true); };
   const openEdit = (g) => {
@@ -293,6 +326,19 @@ export default function Gastos() {
           onChange={e => setPeriodo({ ...periodo, anio:e.target.value })}>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
+
+        <span style={{ width:1, height:22, background:"var(--border)", margin:"0 0.25rem" }} />
+
+        <span style={{ fontSize:"0.8rem", color:"var(--text-muted)", fontWeight:600 }}>Reporte del</span>
+        <input type="date" style={{ width:150 }} value={range.desde}
+          onChange={e => setRange({ ...range, desde:e.target.value })} />
+        <span style={{ fontSize:"0.8rem", color:"var(--text-muted)" }}>al</span>
+        <input type="date" style={{ width:150 }} value={range.hasta}
+          onChange={e => setRange({ ...range, hasta:e.target.value })} />
+        <button className="btn btn-outline btn-sm" disabled={exporting || !range.desde || !range.hasta}
+          onClick={exportarExcel} style={{ display:"flex", alignItems:"center", gap:"0.35rem" }}>
+          <FileSpreadsheet size={14} /> {exporting ? "Generando…" : "Descargar Excel"}
+        </button>
       </div>
 
       {/* Resumen del mes */}
