@@ -55,6 +55,7 @@ app.use("/api/geoauth",       loginLimiter, require("./routes/geoauth"));
 app.use("/api/sessions",      apiLimiter,   require("./routes/sessions"));
 app.use("/api/invoices",     apiLimiter,   require("./routes/invoices"));
 app.use("/api/gastos",        apiLimiter,   require("./routes/gastos"));
+app.use("/api/finanzas",      apiLimiter,   require("./routes/finanzas"));
 app.use("/api/reports",       apiLimiter,   require("./routes/reports"));
 app.use("/api/reminders",     apiLimiter,   require("./routes/reminders"));
 

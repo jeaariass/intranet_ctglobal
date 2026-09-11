@@ -16,6 +16,7 @@ import GeoProjects from "./pages/GeoProjects";
 import GeoProjectDetail from "./pages/GeoProjectDetail";
 import Reports from "./pages/Reports";
 import Invoices from "./pages/Invoices";
+import DashboardFinanzas from "./pages/DashboardFinanzas";
 import Gastos from "./pages/Gastos";
 import Reminders from "./pages/Reminders";
 import NotFound from "./pages/NotFound";
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="geovisores" element={<GeoProjects />} />
             <Route path="geovisores/:id" element={<GeoProjectDetail />} />
             <Route path="reportes" element={<Reports />} />
+            <Route path="finanzas" element={<FinanceRoute><DashboardFinanzas /></FinanceRoute>} />
             <Route path="facturas" element={<FinanceRoute><Invoices /></FinanceRoute>} />
             <Route path="gastos" element={<Gastos />} />
             <Route path="recordatorios" element={<Reminders />} />
