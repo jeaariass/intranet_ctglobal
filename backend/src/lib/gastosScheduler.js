@@ -16,13 +16,13 @@ async function q(text, params = []) {
   return rows;
 }
 
-// Suma un mes a una fecha (YYYY-MM-DD), ajustando al último día si el mes
-// destino es más corto (ej. 31 ene → 28/29 feb).
-function sumarMes(fechaStr) {
+// Suma N meses a una fecha (YYYY-MM-DD), ajustando al último día si el mes
+// destino es más corto (ej. 31 ene +1 → 28/29 feb).
+function sumarMeses(fechaStr, n) {
   if (!fechaStr) return null;
   const d = new Date(fechaStr);
   const dia = d.getDate();
-  const target = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
   const ultimoDia = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
   target.setDate(Math.min(dia, ultimoDia));
   return target.toISOString().slice(0, 10);
@@ -48,20 +48,20 @@ async function tickGastosRecurrentes() {
 
     for (const g of ultimas) {
       try {
-        // Avanza ocurrencia por ocurrencia hasta llegar al mes en curso
-        // (cubre el caso de servidor caído varios meses), tope de seguridad 24.
+        // Avanza ocurrencia por ocurrencia según intervalo_meses (ej. agua
+        // cada 2 meses) hasta llegar al mes en curso, sin adelantarse a la
+        // próxima fecha de cobro. Tope de seguridad 24 iteraciones.
         let actual = g;
         let guard = 0;
-        while (
-          guard++ < 24 &&
-          (actual.periodo_anio * 12 + actual.periodo_mes) < (anioActual * 12 + mesActual)
-        ) {
-          const nuevaFecha = sumarMes(actual.fecha);
-          const nuevoVenc  = actual.fecha_vencimiento ? sumarMes(actual.fecha_vencimiento) : null;
-          const idx = (actual.periodo_anio * 12 + (actual.periodo_mes - 1)) + 1;
+        const intervalo = Math.max(1, actual.intervalo_meses || 1);
+        while (guard++ < 24) {
+          const idx = (actual.periodo_anio * 12 + (actual.periodo_mes - 1)) + intervalo;
           const nuevoAnio = Math.floor(idx / 12);
           const nuevoMes  = (idx % 12) + 1;
+          if ((nuevoAnio * 12 + nuevoMes) > (anioActual * 12 + mesActual)) break;
 
+          const nuevaFecha = sumarMeses(actual.fecha, intervalo);
+          const nuevoVenc  = actual.fecha_vencimiento ? sumarMeses(actual.fecha_vencimiento, intervalo) : null;
           const esFijo = actual.recurrente_tipo === "FIJO";
 
           const rows = await q(`
@@ -69,9 +69,9 @@ async function tickGastosRecurrentes() {
               (categoria, subcategoria, concepto, proveedor, monto, moneda,
                monto_secundario, moneda_secundaria, fecha, fecha_vencimiento,
                periodo_mes, periodo_anio, estado, persona_id, equipo_id, proyecto_id,
-               recurrente, recurrente_tipo, serie_id, por_completar, archivo, notas,
-               registrado_por_id)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+               recurrente, recurrente_tipo, intervalo_meses, serie_id, por_completar,
+               archivo, notas, registrado_por_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
             RETURNING *
           `, [
             actual.categoria, actual.subcategoria, actual.concepto, actual.proveedor,
@@ -83,13 +83,13 @@ async function tickGastosRecurrentes() {
             nuevoMes, nuevoAnio,
             "PENDIENTE",
             actual.persona_id, actual.equipo_id, actual.proyecto_id,
-            true, actual.recurrente_tipo, actual.serie_id,
+            true, actual.recurrente_tipo, intervalo, actual.serie_id,
             !esFijo,
             "", actual.notas,
             actual.registrado_por_id,
           ]);
           actual = rows[0];
-          console.log(`[gastos-scheduler] serie #${actual.serie_id} → nueva ocurrencia #${actual.id} (${nuevoMes}/${nuevoAnio}, ${actual.recurrente_tipo})`);
+          console.log(`[gastos-scheduler] serie #${actual.serie_id} → nueva ocurrencia #${actual.id} (${nuevoMes}/${nuevoAnio}, ${actual.recurrente_tipo}, cada ${intervalo}m)`);
         }
       } catch (e) {
         console.error(`[gastos-scheduler] error generando serie #${g.serie_id}:`, e.message);

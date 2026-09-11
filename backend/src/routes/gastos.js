@@ -378,14 +378,15 @@ router.post("/", authMiddleware, editorMiddleware,
 
       const esRecurrente = d.recurrente === "true" || d.recurrente === true;
       const tipoRec = ["FIJO","VARIABLE"].includes(d.recurrente_tipo) ? d.recurrente_tipo : null;
+      const intervalo = Math.min(12, Math.max(1, int(d.intervalo_meses) || 1));
 
       const rows = await q(`
         INSERT INTO gastos
           (categoria, subcategoria, concepto, proveedor, monto, moneda,
            monto_secundario, moneda_secundaria, fecha, fecha_vencimiento,
            periodo_mes, periodo_anio, estado, persona_id, equipo_id, proyecto_id,
-           recurrente, recurrente_tipo, archivo, notas, registrado_por_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+           recurrente, recurrente_tipo, intervalo_meses, archivo, notas, registrado_por_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
         RETURNING *
       `, [
         d.categoria        || "OTRO",
@@ -406,6 +407,7 @@ router.post("/", authMiddleware, editorMiddleware,
         int(d.proyecto_id),
         esRecurrente,
         esRecurrente ? tipoRec : null,
+        esRecurrente ? intervalo : 1,
         req.file ? req.file.filename : "",
         d.notas             || "",
         req.user.id,
@@ -446,6 +448,7 @@ router.put("/:id", authMiddleware, editorMiddleware,
       const nuevoArchivo = req.file ? req.file.filename : null;
       const esRecurrente = d.recurrente === "true" || d.recurrente === true;
       const tipoRec = ["FIJO","VARIABLE"].includes(d.recurrente_tipo) ? d.recurrente_tipo : null;
+      const intervalo = Math.min(12, Math.max(1, int(d.intervalo_meses) || 1));
       // Guardar con monto real desmarca "por completar" (era una ocurrencia
       // VARIABLE generada automáticamente en espera de la factura).
       const porCompletar = num(d.monto) ? false : prev[0].por_completar;
@@ -456,9 +459,9 @@ router.put("/:id", authMiddleware, editorMiddleware,
           monto=$5, moneda=$6, monto_secundario=$7, moneda_secundaria=$8,
           fecha=$9, fecha_vencimiento=$10, periodo_mes=$11, periodo_anio=$12,
           estado=$13, persona_id=$14, equipo_id=$15, proyecto_id=$16,
-          recurrente=$17, recurrente_tipo=$18, por_completar=$19, notas=$20, updated_at=NOW()
-          ${nuevoArchivo ? ", archivo=$22" : ""}
-        WHERE id=$21
+          recurrente=$17, recurrente_tipo=$18, intervalo_meses=$19, por_completar=$20, notas=$21, updated_at=NOW()
+          ${nuevoArchivo ? ", archivo=$23" : ""}
+        WHERE id=$22
         RETURNING *
       `, [
         d.categoria || "OTRO",
@@ -479,6 +482,7 @@ router.put("/:id", authMiddleware, editorMiddleware,
         int(d.proyecto_id),
         esRecurrente,
         esRecurrente ? tipoRec : null,
+        esRecurrente ? intervalo : 1,
         porCompletar,
         d.notas || "",
         +req.params.id,

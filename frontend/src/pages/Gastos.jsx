@@ -71,9 +71,11 @@ const CAT_BADGE = {
 };
 const RECURRENTE_TIPOS = ["FIJO","VARIABLE"];
 const RECURRENTE_TIPO_LABEL = {
-  FIJO: "Fijo — mismo valor cada mes",
-  VARIABLE: "Variable — misma fecha, valor distinto cada mes",
+  FIJO: "Fijo — mismo valor cada vez",
+  VARIABLE: "Variable — misma fecha, valor distinto cada vez",
 };
+const INTERVALOS_MESES = [1,2,3,4,6,12];
+const INTERVALO_LABEL = { 1:"Cada mes", 2:"Cada 2 meses", 3:"Cada 3 meses", 4:"Cada 4 meses", 6:"Cada 6 meses (semestral)", 12:"Cada 12 meses (anual)" };
 const ESTADOS = ["PENDIENTE","PAGADO","ANULADO"];
 const ESTADO_BADGE = { PENDIENTE:"badge-yellow", PAGADO:"badge-green", ANULADO:"badge-gray" };
 const SUBCATS_RECIBO = ["Energía","Agua","Gas","Internet","Telefonía","Aseo","Vigilancia","Otro"];
@@ -100,7 +102,7 @@ const emptyForm = {
   fecha:"", fecha_vencimiento:"",
   periodo_mes:String(now.getMonth() + 1), periodo_anio:String(now.getFullYear()),
   estado:"PENDIENTE", persona_id:"", equipo_id:"", proyecto_id:"",
-  recurrente:false, recurrente_tipo:"", notas:"",
+  recurrente:false, recurrente_tipo:"", intervalo_meses:"1", notas:"",
 };
 
 export default function Gastos() {
@@ -197,6 +199,7 @@ export default function Gastos() {
       proyecto_id: g.proyecto_id ? String(g.proyecto_id) : "",
       recurrente: !!g.recurrente,
       recurrente_tipo: g.recurrente_tipo || "",
+      intervalo_meses: g.intervalo_meses ? String(g.intervalo_meses) : "1",
       notas: g.notas || "",
     });
     setFile(null);
@@ -440,7 +443,7 @@ export default function Gastos() {
                               {g.proyecto_codigo && <span className="badge badge-blue" style={{ fontSize:"0.66rem" }}>{g.proyecto_codigo}</span>}
                               {g.recurrente && (
                                 <span className="badge badge-gray" style={{ fontSize:"0.66rem" }}>
-                                  🔁 {g.recurrente_tipo === "FIJO" ? "Fijo" : "Variable"}
+                                  🔁 {g.recurrente_tipo === "FIJO" ? "Fijo" : "Variable"} · cada {g.intervalo_meses === 1 ? "mes" : `${g.intervalo_meses} meses`}
                                 </span>
                               )}
                               {g.por_completar && (
@@ -531,6 +534,9 @@ export default function Gastos() {
                       <span className={`badge ${g.recurrente_tipo === "FIJO" ? "badge-blue" : "badge-yellow"}`} style={{ fontSize:"0.7rem" }}>
                         {g.recurrente_tipo === "FIJO" ? "Fijo" : "Variable"}
                       </span>
+                      <div style={{ fontSize:"0.7rem", color:"var(--text-muted)", marginTop:2 }}>
+                        {g.intervalo_meses === 1 ? "Cada mes" : `Cada ${g.intervalo_meses} meses`}
+                      </div>
                     </td>
                     <td style={{ fontSize:"0.82rem" }}>{g.persona_nombre || g.proveedor || "—"}</td>
                     <td style={{ fontSize:"0.8rem", color:"var(--text-muted)" }}>
@@ -814,19 +820,28 @@ export default function Gastos() {
                         checked={form.recurrente}
                         onChange={e => setForm({ ...form, recurrente:e.target.checked,
                           recurrente_tipo: e.target.checked ? (form.recurrente_tipo || "FIJO") : "" })} />
-                      Gasto recurrente (se repite cada mes)
+                      Gasto recurrente (se repite periódicamente)
                     </label>
                     {form.recurrente && (
-                      <div className="form-group" style={{ marginTop:"0.5rem" }}>
-                        <label className="form-label">Tipo de recurrencia *</label>
-                        <select value={form.recurrente_tipo} required
-                          onChange={e => setForm({ ...form, recurrente_tipo:e.target.value })}>
-                          {RECURRENTE_TIPOS.map(t => <option key={t} value={t}>{RECURRENTE_TIPO_LABEL[t]}</option>)}
-                        </select>
-                        <span style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>
+                      <div className="form-grid" style={{ marginTop:"0.5rem" }}>
+                        <div className="form-group">
+                          <label className="form-label">Tipo de recurrencia *</label>
+                          <select value={form.recurrente_tipo} required
+                            onChange={e => setForm({ ...form, recurrente_tipo:e.target.value })}>
+                            {RECURRENTE_TIPOS.map(t => <option key={t} value={t}>{RECURRENTE_TIPO_LABEL[t]}</option>)}
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Periodicidad *</label>
+                          <select value={form.intervalo_meses} required
+                            onChange={e => setForm({ ...form, intervalo_meses:e.target.value })}>
+                            {INTERVALOS_MESES.map(n => <option key={n} value={n}>{INTERVALO_LABEL[n]}</option>)}
+                          </select>
+                        </div>
+                        <span style={{ fontSize:"0.72rem", color:"var(--text-muted)", gridColumn:"1 / -1" }}>
                           {form.recurrente_tipo === "VARIABLE"
-                            ? "Cada mes se crea automáticamente una fila pendiente por completar con el valor real de la factura."
-                            : "Cada mes se crea automáticamente una fila nueva con el mismo valor."}
+                            ? `Cada ${form.intervalo_meses === "1" ? "mes" : `${form.intervalo_meses} meses`} se crea automáticamente una fila pendiente por completar con el valor real de la factura (ej: agua cada 2 meses).`
+                            : `Cada ${form.intervalo_meses === "1" ? "mes" : `${form.intervalo_meses} meses`} se crea automáticamente una fila nueva con el mismo valor.`}
                         </span>
                       </div>
                     )}
