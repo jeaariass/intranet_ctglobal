@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const prisma = require("../lib/prisma");
-const { authMiddleware, editorMiddleware } = require("../middleware/auth");
+const { authMiddleware } = require("../middleware/auth");
 
 // ── Recordatorios ────────────────────────────────────────────
 const OFFSETS_VALIDOS_MAX = 60 * 24 * 60; // 60 días en minutos
@@ -30,6 +30,11 @@ function offsetsVencidos(fechaInicio, offsets) {
   const now = Date.now();
   const t = new Date(fechaInicio).getTime();
   return offsets.filter(o => t - o * 60000 <= now);
+}
+
+// Solo el creador del evento, o un ADMIN/EDITOR, puede modificarlo o borrarlo.
+function puedeEditar(req, ev) {
+  return ev.creado_por_id === req.user.id || ["ADMIN", "EDITOR"].includes(req.user.rol);
 }
 
 function serializarReminder(er) {
@@ -79,7 +84,8 @@ router.get("/:id", authMiddleware, async (req, res, next) => {
 });
 
 // ── POST /api/events ────────────────────────────────────────
-router.post("/", authMiddleware, editorMiddleware, async (req, res, next) => {
+// Cualquier usuario autenticado puede crear eventos.
+router.post("/", authMiddleware, async (req, res, next) => {
   try {
     const { titulo, descripcion, fechaInicio, fechaFin, tipo, proyectoId, recordatorio } = req.body;
     if (!titulo || !fechaInicio) return res.status(400).json({ error: "Título y fecha de inicio requeridos" });
@@ -116,7 +122,8 @@ router.post("/", authMiddleware, editorMiddleware, async (req, res, next) => {
 });
 
 // ── PUT /api/events/:id ─────────────────────────────────────
-router.put("/:id", authMiddleware, editorMiddleware, async (req, res, next) => {
+// Solo el creador del evento, o un ADMIN/EDITOR, puede editarlo.
+router.put("/:id", authMiddleware, async (req, res, next) => {
   try {
     const id = +req.params.id;
     const { titulo, descripcion, fechaInicio, fechaFin, tipo, proyectoId, recordatorio } = req.body;
@@ -125,6 +132,8 @@ router.put("/:id", authMiddleware, editorMiddleware, async (req, res, next) => {
       where: { id }, include: { event_reminders: true },
     });
     if (!actual) return res.status(404).json({ error: "No encontrado" });
+    if (!puedeEditar(req, actual))
+      return res.status(403).json({ error: "Solo el creador del evento o un editor puede modificarlo" });
 
     const data = {};
     if (titulo      !== undefined) data.titulo       = titulo;
@@ -166,9 +175,16 @@ router.put("/:id", authMiddleware, editorMiddleware, async (req, res, next) => {
 });
 
 // ── DELETE /api/events/:id ──────────────────────────────────
-router.delete("/:id", authMiddleware, editorMiddleware, async (req, res, next) => {
+// Solo el creador del evento, o un ADMIN/EDITOR, puede borrarlo.
+router.delete("/:id", authMiddleware, async (req, res, next) => {
   try {
-    await prisma.event.delete({ where: { id: +req.params.id } }); // cascade borra event_reminders
+    const id = +req.params.id;
+    const actual = await prisma.event.findUnique({ where: { id } });
+    if (!actual) return res.status(404).json({ error: "No encontrado" });
+    if (!puedeEditar(req, actual))
+      return res.status(403).json({ error: "Solo el creador del evento o un editor puede borrarlo" });
+
+    await prisma.event.delete({ where: { id } }); // cascade borra event_reminders
     res.json({ message: "Eliminado" });
   } catch (e) { next(e); }
 });

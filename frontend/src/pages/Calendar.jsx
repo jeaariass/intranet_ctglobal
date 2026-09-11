@@ -42,7 +42,8 @@ function parseDate(val) {
 const toInput = (iso) => (iso ? format(new Date(iso), "yyyy-MM-dd'T'HH:mm") : "");
 
 const emptyForm = {
-  id: null, titulo: "", descripcion: "", fecha_inicio: "", fecha_fin: "", tipo: "REUNION",
+  id: null, creado_por_id: null,
+  titulo: "", descripcion: "", fecha_inicio: "", fecha_fin: "", tipo: "REUNION",
   destinatarios: [], canalEmail: true, canalWhatsapp: true, offsets: [1440],
 };
 
@@ -100,7 +101,9 @@ export default function Calendar() {
   const [userSearch, setUserSearch]   = useState("");
   const [custom, setCustom]           = useState({ val: "", unit: "días" });
 
-  const canEdit = ["ADMIN","EDITOR"].includes(user?.rol);
+  // Cualquiera crea eventos. Editar/borrar: solo el creador del evento o ADMIN/EDITOR.
+  const isEditorRole = ["ADMIN","EDITOR"].includes(user?.rol);
+  const puedeEditar = (ev) => ev?.creado_por_id === user?.id || isEditorRole;
 
   const load = () => api.get("/events").then(r => setEvents(r.data));
   useEffect(() => { load(); api.get("/users").then(r => setUsers(r.data)).catch(() => {}); }, []);
@@ -128,6 +131,7 @@ export default function Calendar() {
     const r = ev.recordatorio;
     setForm({
       id: ev.id,
+      creado_por_id: ev.creado_por_id ?? null,
       titulo: ev.titulo || "",
       descripcion: ev.descripcion || "",
       fecha_inicio: toInput(ev.fecha_inicio),
@@ -202,11 +206,9 @@ export default function Calendar() {
           <h1>Calendario corporativo</h1>
           <p>Eventos, entregas y fechas importantes de CTGlobal</p>
         </div>
-        {canEdit && (
-          <button className="btn btn-primary" onClick={() => openCreate(selectedDay)}>
-            + Nuevo evento
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={() => openCreate(selectedDay)}>
+          + Nuevo evento
+        </button>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 300px", gap:"1.5rem" }}
@@ -262,11 +264,9 @@ export default function Calendar() {
                 <h2 style={{ textTransform:"capitalize", fontSize:"0.875rem" }}>
                   {format(selectedDay, "EEEE d 'de' MMMM", { locale:es })}
                 </h2>
-                {canEdit && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => openCreate(selectedDay)}>
-                    <Plus size={13} />
-                  </button>
-                )}
+                <button className="btn btn-ghost btn-sm" onClick={() => openCreate(selectedDay)}>
+                  <Plus size={13} />
+                </button>
               </div>
               <div className="card-body" style={{ padding:"0.75rem" }}>
                 {selectedEvents.length === 0 ? (
@@ -291,7 +291,7 @@ export default function Calendar() {
                           <Bell size={10} /> {ev.recordatorio.offsets?.length || 0}
                         </span>
                       )}
-                      {canEdit && (
+                      {puedeEditar(ev) && (
                         <>
                           <button className="btn btn-ghost btn-sm" style={{ padding:"0.1rem 0.35rem" }}
                             onClick={() => openEdit(ev)}><Pencil size={12} /></button>
@@ -320,8 +320,9 @@ export default function Calendar() {
                   return (
                     <div key={ev.id}
                       style={{ display:"flex", gap:"0.75rem", alignItems:"flex-start",
-                        padding:"0.5rem 0.75rem", borderBottom:"1px solid var(--border)", cursor: canEdit ? "pointer" : "default" }}
-                      onClick={() => canEdit && openEdit(ev)}>
+                        padding:"0.5rem 0.75rem", borderBottom:"1px solid var(--border)",
+                        cursor: puedeEditar(ev) ? "pointer" : "default" }}
+                      onClick={() => puedeEditar(ev) && openEdit(ev)}>
                       <div style={{ background:"var(--primary)", color:"#fff", borderRadius:6, padding:"0.25rem 0.4rem",
                         fontSize:"0.7rem", fontWeight:700, textAlign:"center", minWidth:36, flexShrink:0 }}>
                         <div style={{ fontSize:"1rem" }}>{format(d, "d")}</div>
@@ -473,7 +474,7 @@ export default function Calendar() {
                 </div>
               </div>
               <div className="modal-footer" style={{ justifyContent: modal === "edit" ? "space-between" : "flex-end" }}>
-                {modal === "edit" && canEdit && (
+                {modal === "edit" && puedeEditar(form) && (
                   <button type="button" className="btn btn-danger" disabled={saving}
                     onClick={() => handleDelete(form.id, true)}
                     style={{ display:"flex", alignItems:"center", gap:"0.35rem" }}>
