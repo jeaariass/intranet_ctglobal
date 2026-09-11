@@ -13,7 +13,8 @@ const VALID_ROLES = [
 // firma_archivo) en SOLO LECTURA: aquí no se editan, se exhiben.
 const SAFE_SELECT = {
   id: true, nombre: true, apellido: true, email: true, cargo: true,
-  area: true, telefono: true, avatar: true, rol: true, created_at: true,
+  area: true, telefono: true, avatar: true, rol: true, roles_adicionales: true,
+  created_at: true,
   cedula: true, direccion: true, telefono_whatsapp: true,
   tarjeta_profesional: true, es_persona_juridica: true,
   banco: true, numero_cuenta_banco: true, tipo_cuenta: true,
@@ -21,6 +22,16 @@ const SAFE_SELECT = {
 };
 
 const normalizeRol = (r) => String(r || "").toUpperCase();
+
+// Normaliza/valida una lista de roles adicionales: mayúsculas, únicos,
+// dentro de VALID_ROLES y sin repetir el rol principal.
+function normalizeRolesAdicionales(arr, rolPrincipal) {
+  if (arr === undefined) return undefined;
+  const lista = Array.isArray(arr) ? arr : [];
+  const set = new Set(lista.map(normalizeRol).filter(Boolean));
+  set.delete(normalizeRol(rolPrincipal));
+  return [...set];
+}
 
 router.get("/", authMiddleware, async (req, res, next) => {
   try {
@@ -60,6 +71,7 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const {
       nombre, apellido, email, password, cargo, area, telefono, rol,
+      roles_adicionales,
       cedula, direccion, telefono_whatsapp, tarjeta_profesional,
       es_persona_juridica,
     } = req.body;
@@ -69,6 +81,10 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
     const rolFinal = normalizeRol(rol) || "EMPLEADO";
     if (!VALID_ROLES.includes(rolFinal))
       return res.status(400).json({ error: "Rol inválido" });
+
+    const rolesAdicFinal = normalizeRolesAdicionales(roles_adicionales, rolFinal) || [];
+    if (rolesAdicFinal.some((r) => !VALID_ROLES.includes(r)))
+      return res.status(400).json({ error: "Rol adicional inválido" });
 
     const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (exists) return res.status(400).json({ error: "Email ya registrado" });
@@ -80,6 +96,7 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
         password: await bcrypt.hash(password || "CTGlobal2024*", 10),
         cargo: cargo || "", area: area || "", telefono: telefono || "",
         rol: rolFinal,
+        roles_adicionales: rolesAdicFinal,
         cedula: cedula || "",
         direccion: direccion || "",
         telefono_whatsapp: telefono_whatsapp || "",
@@ -120,6 +137,15 @@ router.put("/:id", authMiddleware, async (req, res, next) => {
         if (!VALID_ROLES.includes(rolFinal))
           return res.status(400).json({ error: "Rol inválido" });
         data.rol = rolFinal;
+      }
+      if (req.body.roles_adicionales !== undefined) {
+        const rolPrincipal = data.rol || (await prisma.user.findUnique({
+          where: { id: uid }, select: { rol: true },
+        }))?.rol;
+        const rolesAdic = normalizeRolesAdicionales(req.body.roles_adicionales, rolPrincipal);
+        if (rolesAdic.some((r) => !VALID_ROLES.includes(r)))
+          return res.status(400).json({ error: "Rol adicional inválido" });
+        data.roles_adicionales = rolesAdic;
       }
       for (const f of ["cedula", "direccion", "tarjeta_profesional"]) {
         if (req.body[f] !== undefined) data[f] = req.body[f];

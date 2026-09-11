@@ -7,7 +7,7 @@ const multer  = require("multer");
 const path    = require("path");
 const fs      = require("fs");
 const { Pool } = require("pg");
-const { authMiddleware, editorMiddleware } = require("../middleware/auth");
+const { authMiddleware, editorMiddleware, financeMiddleware } = require("../middleware/auth");
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false });
 
@@ -44,7 +44,7 @@ async function q(text, params = []) {
 }
 
 // GET /api/invoices
-router.get("/", authMiddleware, async (req, res, next) => {
+router.get("/", authMiddleware, financeMiddleware, async (req, res, next) => {
   try {
     const { tipo, estado, equipoId, anio, mes } = req.query;
     const conds = ["1=1"];
@@ -73,7 +73,7 @@ router.get("/", authMiddleware, async (req, res, next) => {
 });
 
 // GET /api/invoices/alerts
-router.get("/alerts", authMiddleware, async (req, res, next) => {
+router.get("/alerts", authMiddleware, financeMiddleware, async (req, res, next) => {
   try {
     const rows = await q(`
       SELECT i.*, e.nombre AS equipo_nombre
@@ -90,7 +90,7 @@ router.get("/alerts", authMiddleware, async (req, res, next) => {
 });
 
 // GET /api/invoices/summary
-router.get("/summary", authMiddleware, async (req, res, next) => {
+router.get("/summary", authMiddleware, financeMiddleware, async (req, res, next) => {
   try {
     const now  = new Date();
     const mes  = now.getMonth() + 1;
@@ -171,7 +171,7 @@ router.get("/summary", authMiddleware, async (req, res, next) => {
 });
 
 // GET /api/invoices/:id
-router.get("/:id", authMiddleware, async (req, res, next) => {
+router.get("/:id", authMiddleware, financeMiddleware, async (req, res, next) => {
   try {
     const rows = await q(`
       SELECT i.*, e.nombre AS equipo_nombre, e.tipo AS equipo_tipo,

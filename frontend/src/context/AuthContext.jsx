@@ -34,8 +34,17 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // Un usuario tiene un rol principal (user.rol) y puede tener roles
+  // adicionales (user.roles_adicionales, ej. un CONTRATISTA con CONTABILIDAD
+  // extra para ver Facturación). hasRole(...roles) cuenta ambos.
+  const hasRole = (...roles) => {
+    if (!user) return false;
+    const propios = [user.rol, ...(user.roles_adicionales || [])];
+    return roles.some((r) => propios.includes(r));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, hasRole }}>
       {children}
     </AuthContext.Provider>
   );

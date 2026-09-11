@@ -9,6 +9,10 @@ import {
   LogOut, Menu, ChevronRight, Globe, Receipt, Bell, Wallet
 } from "lucide-react";
 
+// Acceso a Facturación: rol principal o adicional (ej. un contratista con
+// CONTABILIDAD extra puede ver Facturación sin ser ADMIN/EDITOR).
+const ROLES_FINANZAS = ["ADMIN", "EDITOR", "CONTABILIDAD", "TESORERIA"];
+
 const NAV_GROUPS = [
   {
     label: "Principal",
@@ -38,7 +42,7 @@ const NAV_GROUPS = [
   {
     label: "Finanzas",
     items: [
-      { to: "/facturas",    icon: Receipt,       label: "Facturación" },
+      { to: "/facturas",    icon: Receipt,       label: "Facturación", roles: ROLES_FINANZAS },
       { to: "/gastos",      icon: Wallet,        label: "Gastos" },
     ],
   },
@@ -66,7 +70,7 @@ function getInitials(n, a) {
 }
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -102,7 +106,9 @@ export default function Layout() {
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="nav-section">
               <div className="nav-section-label">{group.label}</div>
-              {group.items.map(({ to, icon: Icon, label, end }) => (
+              {group.items
+                .filter((it) => !it.roles || hasRole(...it.roles))
+                .map(({ to, icon: Icon, label, end }) => (
                 <NavLink
                   key={to}
                   to={to}

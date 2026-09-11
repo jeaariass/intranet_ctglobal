@@ -21,7 +21,10 @@ router.post("/login", async (req, res, next) => {
       return res.status(401).json({ error: "Credenciales incorrectas" });
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, rol: user.rol, nombre: user.nombre },
+      {
+        id: user.id, email: user.email, rol: user.rol,
+        roles_adicionales: user.roles_adicionales, nombre: user.nombre,
+      },
       SECRET, { expiresIn: EXPIRES }
     );
     const { password: _, ...safe } = user;
@@ -37,7 +40,7 @@ router.get("/me", authMiddleware, async (req, res, next) => {
       select: {
         id: true, nombre: true, apellido: true, email: true,
         cargo: true, area: true, telefono: true, telefono_whatsapp: true,
-        avatar: true, rol: true, created_at: true,
+        avatar: true, rol: true, roles_adicionales: true, created_at: true,
       },
     });
     if (!user) return res.status(404).json({ error: "Usuario no encontrado" });

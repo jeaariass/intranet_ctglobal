@@ -34,6 +34,16 @@ function AdminRoute({ children }) {
   return children;
 }
 
+const ROLES_FINANZAS = ["ADMIN", "EDITOR", "CONTABILIDAD", "TESORERIA"];
+
+function FinanceRoute({ children }) {
+  const { user, loading, hasRole } = useAuth();
+  if (loading) return <div className="loader"><div className="spinner" /></div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!hasRole(...ROLES_FINANZAS)) return <Navigate to="/" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -52,7 +62,7 @@ export default function App() {
             <Route path="geovisores" element={<GeoProjects />} />
             <Route path="geovisores/:id" element={<GeoProjectDetail />} />
             <Route path="reportes" element={<Reports />} />
-            <Route path="facturas" element={<Invoices />} />
+            <Route path="facturas" element={<FinanceRoute><Invoices /></FinanceRoute>} />
             <Route path="gastos" element={<Gastos />} />
             <Route path="recordatorios" element={<Reminders />} />
             <Route path="perfil" element={<Profile />} />

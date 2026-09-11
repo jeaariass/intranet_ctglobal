@@ -27,9 +27,40 @@ const labelOfRol = (r) => ROLES.find((x) => x.value === r)?.label || r;
 const emptyCreate = {
   nombre: "", apellido: "", email: "", password: "",
   cargo: "", area: "", telefono_whatsapp: "", rol: "EMPLEADO",
+  roles_adicionales: [],
   cedula: "", direccion: "",
   tarjeta_profesional: "", es_persona_juridica: null,
 };
+
+// Roles adicionales: un usuario conserva su rol principal (permisos base,
+// ej. ADMIN/EDITOR para editar) y puede sumar roles extra (ej. un
+// CONTRATISTA con CONTABILIDAD para ver Facturación, o SUPERVISION +
+// CONTABILIDAD a la vez).
+function RolesAdicionalesField({ form, setForm }) {
+  const toggle = (v) => {
+    const set = new Set(form.roles_adicionales || []);
+    set.has(v) ? set.delete(v) : set.add(v);
+    setForm({ ...form, roles_adicionales: [...set] });
+  };
+  return (
+    <div className="form-group">
+      <label className="form-label">Roles adicionales</label>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:"0.6rem 1rem" }}>
+        {ROLES.filter((r) => r.value !== form.rol).map((r) => (
+          <label key={r.value} style={{ display:"flex", alignItems:"center", gap:"0.35rem", fontSize:"0.82rem" }}>
+            <input type="checkbox" style={{ width:14, height:14, flex:"0 0 14px" }}
+              checked={(form.roles_adicionales || []).includes(r.value)}
+              onChange={() => toggle(r.value)} />
+            {r.label}
+          </label>
+        ))}
+      </div>
+      <span style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>
+        Opcional. Ej: un contratista con Contabilidad extra puede ver Facturación.
+      </span>
+    </div>
+  );
+}
 
 function getInitials(n, a) {
   return `${n?.[0] || ""}${a?.[0] || ""}`.toUpperCase();
@@ -98,6 +129,7 @@ export default function Admin() {
       area: u.area || "",
       telefono_whatsapp: u.telefono_whatsapp || "",
       rol: u.rol,
+      roles_adicionales: u.roles_adicionales || [],
       cedula: u.cedula || "",
       direccion: u.direccion || "",
       tarjeta_profesional: u.tarjeta_profesional || "",
@@ -262,9 +294,16 @@ export default function Admin() {
                     <td style={{ fontSize: "0.88rem" }}>{u.cargo || "—"}</td>
                     <td style={{ fontSize: "0.88rem" }}>{u.area || "—"}</td>
                     <td>
-                      <span className={`badge ${ROLE_BADGE[u.rol] || "badge-blue"}`}>
-                        {labelOfRol(u.rol)}
-                      </span>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:"0.25rem" }}>
+                        <span className={`badge ${ROLE_BADGE[u.rol] || "badge-blue"}`}>
+                          {labelOfRol(u.rol)}
+                        </span>
+                        {(u.roles_adicionales || []).map((r) => (
+                          <span key={r} className={`badge ${ROLE_BADGE[r] || "badge-blue"}`} style={{ opacity:0.75 }}>
+                            +{labelOfRol(r)}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
                       {new Date(u.created_at).toLocaleDateString("es-CO")}
@@ -365,6 +404,8 @@ export default function Admin() {
                   </div>
                 </div>
 
+                <RolesAdicionalesField form={createForm} setForm={setCreateForm} />
+
                 {createForm.rol === "CONTRATISTA" && (
                   <ContractorFields form={createForm} setForm={setCreateForm} />
                 )}
@@ -436,6 +477,8 @@ export default function Admin() {
                     </select>
                   </div>
                 </div>
+
+                <RolesAdicionalesField form={editForm} setForm={setEditForm} />
 
                 {editForm.rol === "CONTRATISTA" && (
                   <>

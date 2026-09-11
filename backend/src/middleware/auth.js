@@ -13,6 +13,15 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Un usuario tiene un rol principal (req.user.rol) y puede tener roles
+// adicionales (req.user.roles_adicionales, ej. un CONTRATISTA con
+// CONTABILIDAD extra). hasRole() cuenta ambos.
+function hasRole(user, roles) {
+  if (!user) return false;
+  const propios = [user.rol, ...(user.roles_adicionales || [])];
+  return roles.some((r) => propios.includes(r));
+}
+
 function adminMiddleware(req, res, next) {
   if (req.user?.rol !== "ADMIN")
     return res.status(403).json({ error: "Requiere rol administrador" });
@@ -25,4 +34,17 @@ function editorMiddleware(req, res, next) {
   next();
 }
 
-module.exports = { authMiddleware, adminMiddleware, editorMiddleware };
+// Acceso de solo lectura a información financiera (Facturación): por
+// defecto ADMIN/EDITOR/CONTABILIDAD/TESORERIA, o cualquiera que tenga
+// alguno de esos roles como adicional (ej. un contratista con CONTABILIDAD).
+const ROLES_FINANZAS = ["ADMIN", "EDITOR", "CONTABILIDAD", "TESORERIA"];
+function financeMiddleware(req, res, next) {
+  if (!hasRole(req.user, ROLES_FINANZAS))
+    return res.status(403).json({ error: "No tienes acceso a Facturación" });
+  next();
+}
+
+module.exports = {
+  authMiddleware, adminMiddleware, editorMiddleware, financeMiddleware,
+  hasRole, ROLES_FINANZAS,
+};
