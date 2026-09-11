@@ -33,6 +33,11 @@ const NAV_GROUPS = [
     items: [
       { to: "/geovisores",  icon: Map,           label: "Proyectos GIS" },
       { to: "/reportes",    icon: BarChart2,      label: "Reportes" },
+    ],
+  },
+  {
+    label: "Finanzas",
+    items: [
       { to: "/facturas",    icon: Receipt,       label: "Facturación" },
       { to: "/gastos",      icon: Wallet,        label: "Gastos" },
     ],
