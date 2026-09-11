@@ -69,6 +69,11 @@ const CAT_BADGE = {
   RECIBO_PUBLICO:"badge-blue", ADMINISTRACION:"badge-gray", CONTRATISTA:"badge-green",
   VUELO:"badge-blue", VIATICO:"badge-yellow", DEPRECIACION:"badge-gray", OTRO:"badge-gray",
 };
+const RECURRENTE_TIPOS = ["FIJO","VARIABLE"];
+const RECURRENTE_TIPO_LABEL = {
+  FIJO: "Fijo — mismo valor cada mes",
+  VARIABLE: "Variable — misma fecha, valor distinto cada mes",
+};
 const ESTADOS = ["PENDIENTE","PAGADO","ANULADO"];
 const ESTADO_BADGE = { PENDIENTE:"badge-yellow", PAGADO:"badge-green", ANULADO:"badge-gray" };
 const SUBCATS_RECIBO = ["Energía","Agua","Gas","Internet","Telefonía","Aseo","Vigilancia","Otro"];
@@ -95,17 +100,19 @@ const emptyForm = {
   fecha:"", fecha_vencimiento:"",
   periodo_mes:String(now.getMonth() + 1), periodo_anio:String(now.getFullYear()),
   estado:"PENDIENTE", persona_id:"", equipo_id:"", proyecto_id:"",
-  recurrente:false, notas:"",
+  recurrente:false, recurrente_tipo:"", notas:"",
 };
 
 export default function Gastos() {
   const { user } = useAuth();
   const canEdit = ["ADMIN","EDITOR"].includes(user?.rol);
 
-  const [tab, setTab]         = useState("gastos");   // "gastos" | "depreciacion"
+  const [tab, setTab]         = useState("gastos");   // "gastos" | "mensuales" | "contratistas" | "depreciacion"
   const [gastos, setGastos]   = useState([]);
   const [resumen, setResumen] = useState(null);
   const [dep, setDep]         = useState(null);
+  const [recurrentes, setRecurrentes] = useState([]);
+  const [contratistas, setContratistas] = useState(null);
   const [alerts, setAlerts]   = useState([]);
   const [users, setUsers]     = useState([]);
   const [projects, setProjects] = useState([]);
@@ -148,6 +155,16 @@ export default function Gastos() {
     setDep(r.data);
   };
 
+  const loadRecurrentes = async () => {
+    const r = await api.get("/gastos/recurrentes");
+    setRecurrentes(r.data);
+  };
+
+  const loadContratistas = async () => {
+    const r = await api.get(`/gastos/contratistas?mes=${periodo.mes}&anio=${periodo.anio}`);
+    setContratistas(r.data);
+  };
+
   useEffect(() => {
     Promise.all([
       api.get("/users").then(r => setUsers(r.data)),
@@ -157,7 +174,7 @@ export default function Gastos() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadListado(), loadDep()]).finally(() => setLoading(false));
+    Promise.all([loadListado(), loadDep(), loadRecurrentes(), loadContratistas()]).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo.mes, periodo.anio, filter.categoria, filter.estado, filter.personaId, filter.proyectoId, filter.q]);
 
@@ -179,11 +196,14 @@ export default function Gastos() {
       equipo_id: g.equipo_id ? String(g.equipo_id) : "",
       proyecto_id: g.proyecto_id ? String(g.proyecto_id) : "",
       recurrente: !!g.recurrente,
+      recurrente_tipo: g.recurrente_tipo || "",
       notas: g.notas || "",
     });
     setFile(null);
     setShowModal(true);
   };
+
+  const refreshAll = () => Promise.all([loadListado(), loadRecurrentes(), loadContratistas()]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -198,7 +218,7 @@ export default function Gastos() {
       if (editing) await api.put(`/gastos/${editing}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
       else         await api.post("/gastos", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setShowModal(false);
-      loadListado();
+      refreshAll();
     } catch (err) {
       setError(err.response?.data?.error || "Error al guardar el gasto");
     } finally { setSaving(false); }
@@ -206,12 +226,12 @@ export default function Gastos() {
 
   const marcarEstado = async (id, estado) => {
     await api.patch(`/gastos/${id}/estado`, { estado });
-    loadListado();
+    refreshAll();
   };
   const borrar = async (id) => {
     if (!confirm("¿Eliminar este gasto?")) return;
     await api.delete(`/gastos/${id}`);
-    loadListado();
+    refreshAll();
   };
 
   const personaLabel = (u) => `${u.nombre} ${u.apellido}${u.cargo ? ` — ${u.cargo}` : ""}`;
@@ -342,7 +362,7 @@ export default function Gastos() {
 
       {/* Tabs */}
       <div style={{ display:"flex", gap:"0.25rem", borderBottom:"1px solid var(--border)", marginBottom:"1rem" }}>
-        {[["gastos","Gastos"],["depreciacion","Depreciación"]].map(([k, lbl]) => (
+        {[["gastos","Gastos"],["mensuales","Gastos mensuales"],["contratistas","Contratistas"],["depreciacion","Depreciación"]].map(([k, lbl]) => (
           <button key={k} onClick={() => setTab(k)}
             className="btn btn-ghost btn-sm"
             style={{ borderRadius:0, borderBottom: tab === k ? "2px solid var(--primary)" : "2px solid transparent",
@@ -418,6 +438,14 @@ export default function Gastos() {
                               </span>
                               {g.subcategoria && <span>{g.subcategoria}</span>}
                               {g.proyecto_codigo && <span className="badge badge-blue" style={{ fontSize:"0.66rem" }}>{g.proyecto_codigo}</span>}
+                              {g.recurrente && (
+                                <span className="badge badge-gray" style={{ fontSize:"0.66rem" }}>
+                                  🔁 {g.recurrente_tipo === "FIJO" ? "Fijo" : "Variable"}
+                                </span>
+                              )}
+                              {g.por_completar && (
+                                <span className="badge badge-red" style={{ fontSize:"0.66rem" }}>⚠ Por completar</span>
+                              )}
                             </div>
                             {g.notas && <div style={{ fontSize:"0.72rem", color:"var(--text-muted)", marginTop:2 }}>{g.notas}</div>}
                           </td>
@@ -451,7 +479,13 @@ export default function Gastos() {
                                     style={{ background:"var(--success-bg)", color:"var(--success)", border:"1px solid #bbf7d0" }}
                                     onClick={() => marcarEstado(g.id, "PAGADO")}>✓ Pagar</button>
                                 )}
-                                <button className="btn btn-ghost btn-sm" onClick={() => openEdit(g)}>Editar</button>
+                                {g.por_completar ? (
+                                  <button className="btn btn-sm"
+                                    style={{ background:"#fef3c7", color:"#92400e", border:"1px solid #fde68a" }}
+                                    onClick={() => openEdit(g)}>Completar valor</button>
+                                ) : (
+                                  <button className="btn btn-ghost btn-sm" onClick={() => openEdit(g)}>Editar</button>
+                                )}
                                 <button className="btn btn-danger btn-sm" onClick={() => borrar(g.id)}>✕</button>
                               </div>
                             </td>
@@ -465,6 +499,116 @@ export default function Gastos() {
             </div>
           )}
         </>
+      ) : tab === "mensuales" ? (
+        /* ── Tab Gastos mensuales (recurrentes FIJO/VARIABLE) ── */
+        <div className="card">
+          <div style={{ padding:"0.85rem 1rem", fontSize:"0.78rem", color:"var(--text-muted)", borderBottom:"1px solid var(--border)" }}>
+            Series activas. Cada 1° de mes el sistema crea automáticamente la fila del mes: <b>Fijo</b> repite el mismo
+            valor; <b>Variable</b> crea la fila marcada "por completar" hasta que edites el valor real de la factura.
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Concepto</th><th>Tipo</th><th>Proveedor / Persona</th>
+                  <th>Última ocurrencia</th><th>Valor</th><th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recurrentes.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign:"center", color:"var(--text-muted)", padding:"1.5rem" }}>
+                    Ningún gasto recurrente configurado. Marca "Gasto recurrente" al crear un recibo público o de administración.
+                  </td></tr>
+                ) : recurrentes.map(g => (
+                  <tr key={g.serie_id}>
+                    <td>
+                      <div style={{ fontWeight:600, fontSize:"0.85rem", display:"flex", alignItems:"center", gap:"0.4rem" }}>
+                        <span>{CAT_ICON[g.categoria]}</span> {g.concepto}
+                      </div>
+                      {g.subcategoria && <div style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>{g.subcategoria}</div>}
+                    </td>
+                    <td>
+                      <span className={`badge ${g.recurrente_tipo === "FIJO" ? "badge-blue" : "badge-yellow"}`} style={{ fontSize:"0.7rem" }}>
+                        {g.recurrente_tipo === "FIJO" ? "Fijo" : "Variable"}
+                      </span>
+                    </td>
+                    <td style={{ fontSize:"0.82rem" }}>{g.persona_nombre || g.proveedor || "—"}</td>
+                    <td style={{ fontSize:"0.8rem", color:"var(--text-muted)" }}>
+                      {g.periodo_mes && g.periodo_anio ? `${MESES[g.periodo_mes]} ${g.periodo_anio}` : "—"}
+                    </td>
+                    <td style={{ fontWeight:700, fontSize:"0.86rem" }}>{fmtDoble(g)}</td>
+                    <td style={{ display:"flex", gap:"0.35rem", flexWrap:"wrap" }}>
+                      <span className={`badge ${ESTADO_BADGE[g.estado]}`}>{g.estado}</span>
+                      {g.por_completar && (
+                        <button className="btn btn-sm"
+                          style={{ background:"#fef3c7", color:"#92400e", border:"1px solid #fde68a" }}
+                          onClick={() => openEdit(g)}>⚠ Completar valor</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : tab === "contratistas" ? (
+        /* ── Tab Contratistas (pagos a contratistas del período) ── */
+        <div className="card">
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Contratista</th><th>Datos de pago</th>
+                  <th>Registros</th><th>Pendientes</th><th>Total período</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(contratistas?.contratistas || []).length === 0 ? (
+                  <tr><td colSpan={5} style={{ textAlign:"center", color:"var(--text-muted)", padding:"1.5rem" }}>
+                    Sin pagos a contratistas en {MESES[+periodo.mes]} {periodo.anio}.
+                  </td></tr>
+                ) : contratistas.contratistas.map(c => (
+                  <tr key={c.id}>
+                    <td>
+                      <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{c.nombre} {c.apellido}</div>
+                      <div style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>
+                        {c.cedula || "—"}{c.es_persona_juridica ? " · Persona jurídica" : ""}
+                        {c.contrato_referencia ? ` · Contrato ${c.contrato_referencia}` : ""}
+                      </div>
+                    </td>
+                    <td style={{ fontSize:"0.8rem" }}>
+                      {c.banco ? (
+                        <>{c.banco} · {c.tipo_cuenta || ""} {c.numero_cuenta_banco}</>
+                      ) : <span style={{ color:"var(--text-light)" }}>Sin datos bancarios registrados</span>}
+                    </td>
+                    <td style={{ fontSize:"0.82rem" }}>{c.count}</td>
+                    <td>
+                      {+c.pendientes > 0
+                        ? <span className="badge badge-yellow">{c.pendientes} pendiente(s)</span>
+                        : <span className="badge badge-green">Al día</span>}
+                    </td>
+                    <td style={{ fontWeight:700, fontSize:"0.9rem" }}>
+                      {cop0(c.total_cop)}
+                      {+c.total_usd > 0 && (
+                        <div style={{ fontWeight:600, fontSize:"0.78rem", color:"#1d4ed8" }}>
+                          USD {(+c.total_usd).toLocaleString("es-CO", { minimumFractionDigits:2 })}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {(contratistas?.contratistas || []).length > 0 && (
+                <tfoot>
+                  <tr style={{ fontWeight:700 }}>
+                    <td colSpan={4} style={{ textAlign:"right" }}>Total pagado a contratistas</td>
+                    <td>{cop0(contratistas.contratistas.reduce((a, c) => a + (+c.total_cop), 0))}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
       ) : (
         /* ── Tab Depreciación ── */
         <div className="card">
@@ -664,12 +808,29 @@ export default function Gastos() {
                 </div>
 
                 {showRecurrente && (
-                  <label style={{ display:"flex", alignItems:"center", gap:"0.5rem", fontSize:"0.82rem", margin:"0.25rem 0 0.5rem" }}>
-                    <input type="checkbox" style={{ width:15, height:15, flex:"0 0 15px" }}
-                      checked={form.recurrente}
-                      onChange={e => setForm({ ...form, recurrente:e.target.checked })} />
-                    Gasto recurrente (se repite cada mes)
-                  </label>
+                  <div style={{ margin:"0.25rem 0 0.5rem" }}>
+                    <label style={{ display:"flex", alignItems:"center", gap:"0.5rem", fontSize:"0.82rem" }}>
+                      <input type="checkbox" style={{ width:15, height:15, flex:"0 0 15px" }}
+                        checked={form.recurrente}
+                        onChange={e => setForm({ ...form, recurrente:e.target.checked,
+                          recurrente_tipo: e.target.checked ? (form.recurrente_tipo || "FIJO") : "" })} />
+                      Gasto recurrente (se repite cada mes)
+                    </label>
+                    {form.recurrente && (
+                      <div className="form-group" style={{ marginTop:"0.5rem" }}>
+                        <label className="form-label">Tipo de recurrencia *</label>
+                        <select value={form.recurrente_tipo} required
+                          onChange={e => setForm({ ...form, recurrente_tipo:e.target.value })}>
+                          {RECURRENTE_TIPOS.map(t => <option key={t} value={t}>{RECURRENTE_TIPO_LABEL[t]}</option>)}
+                        </select>
+                        <span style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>
+                          {form.recurrente_tipo === "VARIABLE"
+                            ? "Cada mes se crea automáticamente una fila pendiente por completar con el valor real de la factura."
+                            : "Cada mes se crea automáticamente una fila nueva con el mismo valor."}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 <div className="form-group">

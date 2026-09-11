@@ -142,6 +142,63 @@ router.get("/alerts", authMiddleware, async (req, res, next) => {
 });
 
 // ════════════════════════════════════════════════════════════
+//  RECURRENTES — gastos mensuales (FIJO/VARIABLE), última ocurrencia por serie
+// ════════════════════════════════════════════════════════════
+router.get("/recurrentes", authMiddleware, async (req, res, next) => {
+  try {
+    const rows = await q(`
+      SELECT DISTINCT ON (g.serie_id) g.*,
+        p.nombre || ' ' || p.apellido       AS persona_nombre,
+        pr.codigo                           AS proyecto_codigo,
+        e.nombre                            AS equipo_nombre
+      FROM gastos g
+      LEFT JOIN users       p  ON p.id  = g.persona_id
+      LEFT JOIN geo_projects pr ON pr.id = g.proyecto_id
+      LEFT JOIN equipment   e  ON e.id  = g.equipo_id
+      WHERE g.recurrente = TRUE AND g.serie_id IS NOT NULL
+      ORDER BY g.serie_id, (g.periodo_anio * 12 + g.periodo_mes) DESC, g.id DESC
+    `);
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
+// ════════════════════════════════════════════════════════════
+//  CONTRATISTAS — total pagado por persona en el período + datos bancarios
+// ════════════════════════════════════════════════════════════
+router.get("/contratistas", authMiddleware, async (req, res, next) => {
+  try {
+    const now  = new Date();
+    const mes  = req.query.mes  ? +req.query.mes  : now.getMonth() + 1;
+    const anio = req.query.anio ? +req.query.anio : now.getFullYear();
+
+    const rows = await q(`
+      SELECT
+        u.id, u.nombre, u.apellido, u.cedula, u.es_persona_juridica,
+        u.banco, u.numero_cuenta_banco, u.tipo_cuenta, u.contrato_referencia,
+        COALESCE(SUM(CASE WHEN g.moneda='COP' THEN g.monto ELSE 0 END), 0) AS total_cop,
+        COALESCE(SUM(CASE WHEN g.moneda='USD' THEN g.monto ELSE 0 END), 0) AS total_usd,
+        COUNT(g.id) FILTER (WHERE g.id IS NOT NULL)                        AS count,
+        COUNT(g.id) FILTER (WHERE g.estado = 'PENDIENTE')                  AS pendientes,
+        json_agg(
+          json_build_object(
+            'id', g.id, 'concepto', g.concepto, 'monto', g.monto, 'moneda', g.moneda,
+            'estado', g.estado, 'fecha', g.fecha, 'proyecto_id', g.proyecto_id
+          ) ORDER BY g.fecha DESC
+        ) FILTER (WHERE g.id IS NOT NULL) AS gastos
+      FROM users u
+      JOIN gastos g ON g.persona_id = u.id
+        AND g.categoria = 'CONTRATISTA'
+        AND g.periodo_mes = $1 AND g.periodo_anio = $2
+        AND g.estado <> 'ANULADO'
+      WHERE u.rol = 'CONTRATISTA'
+      GROUP BY u.id
+      ORDER BY total_cop DESC
+    `, [mes, anio]);
+    res.json({ mes, anio, contratistas: rows });
+  } catch (e) { next(e); }
+});
+
+// ════════════════════════════════════════════════════════════
 //  RESUMEN MENSUAL
 // ════════════════════════════════════════════════════════════
 router.get("/resumen", authMiddleware, async (req, res, next) => {
@@ -319,13 +376,16 @@ router.post("/", authMiddleware, editorMiddleware,
       const moneda = MONEDAS.includes(d.moneda) ? d.moneda : "COP";
       const monedaSec = MONEDAS.includes(d.moneda_secundaria) ? d.moneda_secundaria : null;
 
+      const esRecurrente = d.recurrente === "true" || d.recurrente === true;
+      const tipoRec = ["FIJO","VARIABLE"].includes(d.recurrente_tipo) ? d.recurrente_tipo : null;
+
       const rows = await q(`
         INSERT INTO gastos
           (categoria, subcategoria, concepto, proveedor, monto, moneda,
            monto_secundario, moneda_secundaria, fecha, fecha_vencimiento,
            periodo_mes, periodo_anio, estado, persona_id, equipo_id, proyecto_id,
-           recurrente, archivo, notas, registrado_por_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+           recurrente, recurrente_tipo, archivo, notas, registrado_por_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
         RETURNING *
       `, [
         d.categoria        || "OTRO",
@@ -344,12 +404,23 @@ router.post("/", authMiddleware, editorMiddleware,
         int(d.persona_id),
         int(d.equipo_id),
         int(d.proyecto_id),
-        d.recurrente === "true" || d.recurrente === true,
+        esRecurrente,
+        esRecurrente ? tipoRec : null,
         req.file ? req.file.filename : "",
         d.notas             || "",
         req.user.id,
       ]);
-      res.status(201).json(rows[0]);
+
+      let gasto = rows[0];
+      // Nueva serie recurrente: se autoreferencia como cabeza de la cadena.
+      if (esRecurrente && tipoRec) {
+        const upd = await q(
+          "UPDATE gastos SET serie_id = $1 WHERE id = $1 RETURNING *",
+          [gasto.id]
+        );
+        gasto = upd[0];
+      }
+      res.status(201).json(gasto);
     } catch (e) {
       if (req.file) rmFile(req.file.filename);
       next(e);
@@ -364,7 +435,7 @@ router.put("/:id", authMiddleware, editorMiddleware,
   upload.single("archivo"), async (req, res, next) => {
     try {
       const d = req.body;
-      const prev = await q("SELECT archivo FROM gastos WHERE id=$1", [+req.params.id]);
+      const prev = await q("SELECT archivo, por_completar FROM gastos WHERE id=$1", [+req.params.id]);
       if (!prev[0]) {
         if (req.file) rmFile(req.file.filename);
         return res.status(404).json({ error: "Gasto no encontrado" });
@@ -373,6 +444,11 @@ router.put("/:id", authMiddleware, editorMiddleware,
       const moneda = MONEDAS.includes(d.moneda) ? d.moneda : "COP";
       const monedaSec = MONEDAS.includes(d.moneda_secundaria) ? d.moneda_secundaria : null;
       const nuevoArchivo = req.file ? req.file.filename : null;
+      const esRecurrente = d.recurrente === "true" || d.recurrente === true;
+      const tipoRec = ["FIJO","VARIABLE"].includes(d.recurrente_tipo) ? d.recurrente_tipo : null;
+      // Guardar con monto real desmarca "por completar" (era una ocurrencia
+      // VARIABLE generada automáticamente en espera de la factura).
+      const porCompletar = num(d.monto) ? false : prev[0].por_completar;
 
       const rows = await q(`
         UPDATE gastos SET
@@ -380,9 +456,9 @@ router.put("/:id", authMiddleware, editorMiddleware,
           monto=$5, moneda=$6, monto_secundario=$7, moneda_secundaria=$8,
           fecha=$9, fecha_vencimiento=$10, periodo_mes=$11, periodo_anio=$12,
           estado=$13, persona_id=$14, equipo_id=$15, proyecto_id=$16,
-          recurrente=$17, notas=$18, updated_at=NOW()
-          ${nuevoArchivo ? ", archivo=$20" : ""}
-        WHERE id=$19
+          recurrente=$17, recurrente_tipo=$18, por_completar=$19, notas=$20, updated_at=NOW()
+          ${nuevoArchivo ? ", archivo=$22" : ""}
+        WHERE id=$21
         RETURNING *
       `, [
         d.categoria || "OTRO",
@@ -401,11 +477,22 @@ router.put("/:id", authMiddleware, editorMiddleware,
         int(d.persona_id),
         int(d.equipo_id),
         int(d.proyecto_id),
-        d.recurrente === "true" || d.recurrente === true,
+        esRecurrente,
+        esRecurrente ? tipoRec : null,
+        porCompletar,
         d.notas || "",
         +req.params.id,
         ...(nuevoArchivo ? [nuevoArchivo] : []),
       ]);
+
+      // Si se activó como recurrente y aún no tiene serie, se vuelve cabeza de cadena.
+      if (esRecurrente && tipoRec && !rows[0].serie_id) {
+        const upd = await q(
+          "UPDATE gastos SET serie_id = id WHERE id = $1 RETURNING *",
+          [+req.params.id]
+        );
+        rows[0] = upd[0];
+      }
 
       if (nuevoArchivo && prev[0].archivo) rmFile(prev[0].archivo);
       res.json(rows[0]);

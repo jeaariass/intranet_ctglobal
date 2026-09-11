@@ -5,6 +5,7 @@ const path = require("path");
 const rateLimit = require("express-rate-limit");
 const prisma = require("./lib/prisma");
 const { startScheduler } = require("./lib/reminderScheduler");
+const { startGastosScheduler } = require("./lib/gastosScheduler");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -82,6 +83,7 @@ async function start() {
   console.log("✅ Conectado a PostgreSQL");
 
   startScheduler();
+  startGastosScheduler();
 
   app.listen(PORT, () =>
     console.log(`✅ Servidor CTGlobal v2 en http://localhost:${PORT}`)
