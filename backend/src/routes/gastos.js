@@ -8,6 +8,7 @@ const fs       = require("fs");
 const ExcelJS  = require("exceljs");
 const { Pool } = require("pg");
 const { authMiddleware, editorMiddleware } = require("../middleware/auth");
+const { siguientePeriodo, generarOcurrencia } = require("../lib/gastosRecurrentes");
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false });
 
@@ -35,6 +36,16 @@ const upload = multer({
     [".pdf", ".jpg", ".jpeg", ".png"].includes(
       path.extname(file.originalname).toLowerCase()
     ) ? cb(null, true) : cb(new Error("Solo PDF o imágenes"));
+  },
+});
+
+// Import histórico: el archivo se parsea en memoria (nunca se guarda en disco).
+const uploadXlsx = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    [".xlsx"].includes(path.extname(file.originalname).toLowerCase())
+      ? cb(null, true) : cb(new Error("El archivo debe ser .xlsx"));
   },
 });
 
@@ -263,6 +274,260 @@ router.get("/export.xlsx", authMiddleware, async (req, res, next) => {
 });
 
 // ════════════════════════════════════════════════════════════
+//  IMPORTAR HISTÓRICO — plantilla Excel normalizada + carga masiva
+// ════════════════════════════════════════════════════════════
+const IMPORT_CATEGORIAS = ["RECIBO_PUBLICO", "ADMINISTRACION", "CONTRATISTA", "VUELO", "VIATICO", "OTRO"];
+const CATEGORIA_LABEL_TO_CODE = Object.fromEntries(IMPORT_CATEGORIAS.map(c => [CAT_LABEL[c], c]));
+const ESTADO_LABEL = { PENDIENTE: "Pendiente", PAGADO: "Pagado", ANULADO: "Anulado" };
+const ESTADO_LABEL_TO_CODE = Object.fromEntries(Object.entries(ESTADO_LABEL).map(([k, v]) => [v, k]));
+const TIPO_REC_LABEL = { FIJO: "Fijo", VARIABLE: "Variable" };
+const TIPO_REC_LABEL_TO_CODE = Object.fromEntries(Object.entries(TIPO_REC_LABEL).map(([k, v]) => [v, k]));
+const IMPORT_INTERVALOS = [1, 2, 3, 4, 6, 12];
+const IMPORT_LAST_ROW = 500; // filas habilitadas con listas desplegables en la plantilla
+
+const IMPORT_COLS = [
+  { key: "fecha",        header: "Fecha* (aaaa-mm-dd)",      width: 16 },
+  { key: "categoria",    header: "Categoría*",                width: 20 },
+  { key: "subcategoria", header: "Subcategoría",              width: 16 },
+  { key: "concepto",     header: "Concepto*",                 width: 30 },
+  { key: "proveedor",    header: "Proveedor",                 width: 22 },
+  { key: "cedula",       header: "Persona (cédula)",          width: 16 },
+  { key: "proyecto",     header: "Proyecto (código)",         width: 16 },
+  { key: "monto",        header: "Monto*",                    width: 14 },
+  { key: "moneda",       header: "Moneda*",                   width: 10 },
+  { key: "montoSec",     header: "Monto adicional",           width: 14 },
+  { key: "monedaSec",    header: "Moneda adicional",          width: 12 },
+  { key: "vence",        header: "Fecha vencimiento",         width: 16 },
+  { key: "estado",       header: "Estado*",                   width: 12 },
+  { key: "recurrente",   header: "Recurrente",                width: 10 },
+  { key: "tipoRec",      header: "Tipo recurrente",           width: 14 },
+  { key: "intervalo",    header: "Intervalo (meses)",         width: 14 },
+  { key: "notas",        header: "Notas",                     width: 28 },
+];
+
+function colLetter(idx) { // 1-based
+  let s = "", n = idx;
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+function addListValidation(ws, colIdx, list, allowBlank = true) {
+  const letter = colLetter(colIdx);
+  const formula = `"${list.join(",")}"`;
+  for (let r = 2; r <= IMPORT_LAST_ROW; r++) {
+    ws.getCell(`${letter}${r}`).dataValidation = {
+      type: "list", allowBlank, formulae: [formula],
+      showErrorMessage: true, errorStyle: "error",
+      error: "Selecciona un valor de la lista desplegable.",
+      promptTitle: "Valor permitido", prompt: "Usa la lista desplegable de esta celda.",
+    };
+  }
+}
+
+router.get("/import/plantilla.xlsx", authMiddleware, editorMiddleware, async (req, res, next) => {
+  try {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Intranet CTGlobal";
+
+    // ── Instrucciones ──
+    const wsI = wb.addWorksheet("Instrucciones");
+    wsI.columns = [{ width: 100 }];
+    const lineas = [
+      "PLANTILLA DE IMPORTACIÓN DE GASTOS HISTÓRICOS",
+      "",
+      "1. Completa la hoja 'Gastos', una fila por registro. Borra la fila de ejemplo antes de importar (o déjala: se ignora automáticamente).",
+      "2. Las columnas Categoría, Moneda, Estado, Recurrente y Tipo recurrente SOLO aceptan los valores de su lista desplegable (clic en la celda → flecha). No escribas el valor a mano: evita errores de mayúsculas/tildes.",
+      "3. Campos con * son obligatorios.",
+      "4. Persona (cédula): solo para categoría 'Pago contratista' — debe coincidir exactamente con la cédula registrada en Usuarios.",
+      "5. Proyecto (código): opcional — debe coincidir con el código del proyecto en Geovisores.",
+      "6. Si marcas Recurrente = 'Sí', esa fila queda como cabeza de una nueva serie recurrente y el sistema seguirá generando las ocurrencias siguientes (Fijo = mismo valor, Variable = queda 'por completar'). Marca Recurrente = 'Sí' solo en la fila MÁS RECIENTE de cada concepto recurrente.",
+      "7. Fechas en formato AAAA-MM-DD (ej. 2026-08-26).",
+      "8. Si algo falla, la importación completa se rechaza y se listan los errores fila por fila — no se crea ningún registro parcial.",
+    ];
+    lineas.forEach((t, i) => {
+      const row = wsI.addRow([t]);
+      if (i === 0) row.font = { bold: true, size: 13 };
+    });
+
+    // ── Hoja de datos ──
+    const ws = wb.addWorksheet("Gastos");
+    ws.columns = IMPORT_COLS.map(c => ({ header: c.header, key: c.key, width: c.width }));
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+
+    ws.addRow({
+      fecha: "2026-08-26", categoria: CAT_LABEL.RECIBO_PUBLICO, subcategoria: "Energía",
+      concepto: "EJEMPLO — borra esta fila", proveedor: "Enel", cedula: "", proyecto: "",
+      monto: 217000, moneda: "COP", montoSec: "", monedaSec: "",
+      vence: "2026-08-26", estado: ESTADO_LABEL.PAGADO,
+      recurrente: "Sí", tipoRec: TIPO_REC_LABEL.VARIABLE, intervalo: 1,
+      notas: "",
+    }).font = { italic: true, color: { argb: "FF94A3B8" } };
+
+    const idx = Object.fromEntries(IMPORT_COLS.map((c, i) => [c.key, i + 1]));
+    addListValidation(ws, idx.categoria, IMPORT_CATEGORIAS.map(c => CAT_LABEL[c]), false);
+    addListValidation(ws, idx.moneda, MONEDAS, false);
+    addListValidation(ws, idx.monedaSec, MONEDAS, true);
+    addListValidation(ws, idx.estado, Object.values(ESTADO_LABEL), false);
+    addListValidation(ws, idx.recurrente, ["Sí", "No"], true);
+    addListValidation(ws, idx.tipoRec, Object.values(TIPO_REC_LABEL), true);
+    addListValidation(ws, idx.intervalo, IMPORT_INTERVALOS, true);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="plantilla_gastos_historicos.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (e) { next(e); }
+});
+
+function cellText(cell) {
+  const v = cell.value;
+  if (v == null) return "";
+  if (typeof v === "object" && "result" in v) return String(v.result ?? "").trim();
+  if (typeof v === "object" && "text" in v) return String(v.text).trim();
+  if (typeof v === "object" && v.richText) return v.richText.map(r => r.text).join("").trim();
+  return String(v).trim();
+}
+function cellNum(cell) {
+  const v = cell.value;
+  if (v == null || v === "") return null;
+  const raw = (typeof v === "object" && "result" in v) ? v.result : v;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+function cellDate(cell) {
+  const v = cell.value;
+  if (v == null || v === "") return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  const raw = (typeof v === "object" && "result" in v) ? v.result : v;
+  if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+  const s = String(raw).trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+router.post("/import", authMiddleware, editorMiddleware, uploadXlsx.single("archivo"), async (req, res, next) => {
+  if (!req.file) return res.status(400).json({ error: "Adjunta el archivo .xlsx de la plantilla" });
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(req.file.buffer);
+    const ws = wb.getWorksheet("Gastos");
+    if (!ws) return res.status(400).json({ error: "El archivo no tiene una hoja 'Gastos'. Usa la plantilla oficial." });
+
+    const idx = Object.fromEntries(IMPORT_COLS.map((c, i) => [c.key, i + 1]));
+    const parsed = [];
+    const errores = [];
+    const cedulas = new Set();
+    const codigos = new Set();
+
+    ws.eachRow((row, rowNum) => {
+      if (rowNum === 1) return;
+      const get = (key) => row.getCell(idx[key]);
+      const concepto = cellText(get("concepto"));
+      const fecha = cellDate(get("fecha"));
+      const categoriaLabel = cellText(get("categoria"));
+      const monto = cellNum(get("monto"));
+      const vacia = !concepto && !fecha && !categoriaLabel && monto == null;
+      if (vacia) return;
+      if (/^EJEMPLO\b/i.test(concepto)) return;
+
+      const fila = { rowNum, concepto, fecha, categoriaLabel, monto };
+      fila.subcategoria = cellText(get("subcategoria"));
+      fila.proveedor    = cellText(get("proveedor"));
+      fila.cedula       = cellText(get("cedula"));
+      fila.proyecto     = cellText(get("proyecto"));
+      fila.moneda       = cellText(get("moneda")) || "COP";
+      fila.montoSec     = cellNum(get("montoSec"));
+      fila.monedaSec    = cellText(get("monedaSec")) || null;
+      fila.vence        = cellDate(get("vence"));
+      fila.estadoLabel  = cellText(get("estado")) || ESTADO_LABEL.PAGADO;
+      fila.recurrenteTxt = cellText(get("recurrente")) || "No";
+      fila.tipoRecLabel = cellText(get("tipoRec"));
+      fila.intervalo    = cellNum(get("intervalo"));
+      fila.notas        = cellText(get("notas"));
+
+      if (fila.cedula) cedulas.add(fila.cedula);
+      if (fila.proyecto) codigos.add(fila.proyecto);
+      parsed.push(fila);
+    });
+
+    if (parsed.length === 0) return res.status(400).json({ error: "El archivo no tiene filas con datos" });
+
+    const [personas, proyectos] = await Promise.all([
+      cedulas.size ? q(`SELECT id, cedula FROM users WHERE cedula = ANY($1)`, [[...cedulas]]) : [],
+      codigos.size ? q(`SELECT id, codigo FROM geo_projects WHERE codigo = ANY($1)`, [[...codigos]]) : [],
+    ]);
+    const personaByCedula = Object.fromEntries(personas.map(p => [p.cedula, p.id]));
+    const proyectoByCodigo = Object.fromEntries(proyectos.map(p => [p.codigo, p.id]));
+
+    for (const f of parsed) {
+      const pfx = `Fila ${f.rowNum}: `;
+      if (!f.fecha) errores.push(pfx + "fecha inválida o vacía (usa AAAA-MM-DD)");
+      if (!f.concepto) errores.push(pfx + "concepto vacío");
+      if (!CATEGORIA_LABEL_TO_CODE[f.categoriaLabel]) errores.push(pfx + `categoría inválida "${f.categoriaLabel}" — usa el menú desplegable`);
+      if (f.monto == null || f.monto <= 0) errores.push(pfx + "monto inválido (debe ser un número mayor a 0)");
+      if (!MONEDAS.includes(f.moneda)) errores.push(pfx + `moneda inválida "${f.moneda}"`);
+      if (f.monedaSec && !MONEDAS.includes(f.monedaSec)) errores.push(pfx + `moneda adicional inválida "${f.monedaSec}"`);
+      if (!ESTADO_LABEL_TO_CODE[f.estadoLabel]) errores.push(pfx + `estado inválido "${f.estadoLabel}" — usa el menú desplegable`);
+      if (f.cedula && !personaByCedula[f.cedula]) errores.push(pfx + `no existe ningún usuario con cédula "${f.cedula}"`);
+      if (f.proyecto && !proyectoByCodigo[f.proyecto]) errores.push(pfx + `no existe ningún proyecto con código "${f.proyecto}"`);
+
+      const esRecurrente = f.recurrenteTxt === "Sí";
+      if (esRecurrente) {
+        if (!TIPO_REC_LABEL_TO_CODE[f.tipoRecLabel]) errores.push(pfx + `tipo recurrente inválido "${f.tipoRecLabel}" — usa el menú desplegable`);
+        if (!IMPORT_INTERVALOS.includes(f.intervalo)) errores.push(pfx + `intervalo (meses) inválido — usa el menú desplegable`);
+      } else if (f.recurrenteTxt && f.recurrenteTxt !== "No") {
+        errores.push(pfx + `columna Recurrente inválida "${f.recurrenteTxt}" — usa el menú desplegable`);
+      }
+    }
+
+    if (errores.length > 0) return res.status(400).json({ error: "La plantilla tiene errores, no se importó nada", errores });
+
+    const client = await pool.connect();
+    let insertados = 0;
+    try {
+      await client.query("BEGIN");
+      for (const f of parsed) {
+        const [anio, mes] = f.fecha.split("-").map(Number);
+        const esRecurrente = f.recurrenteTxt === "Sí";
+        const { rows } = await client.query(`
+          INSERT INTO gastos
+            (categoria, subcategoria, concepto, proveedor, monto, moneda,
+             monto_secundario, moneda_secundaria, fecha, fecha_vencimiento,
+             periodo_mes, periodo_anio, estado, persona_id, equipo_id, proyecto_id,
+             recurrente, recurrente_tipo, intervalo_meses, archivo, notas, registrado_por_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+          RETURNING id
+        `, [
+          CATEGORIA_LABEL_TO_CODE[f.categoriaLabel], f.subcategoria, f.concepto, f.proveedor,
+          f.monto, f.moneda, f.montoSec, f.monedaSec,
+          f.fecha, f.vence, mes, anio,
+          ESTADO_LABEL_TO_CODE[f.estadoLabel],
+          f.cedula ? personaByCedula[f.cedula] : null,
+          null,
+          f.proyecto ? proyectoByCodigo[f.proyecto] : null,
+          esRecurrente,
+          esRecurrente ? TIPO_REC_LABEL_TO_CODE[f.tipoRecLabel] : null,
+          esRecurrente ? f.intervalo : 1,
+          "", f.notas, req.user.id,
+        ]);
+        const id = rows[0].id;
+        if (esRecurrente) await client.query("UPDATE gastos SET serie_id = $1 WHERE id = $1", [id]);
+        insertados++;
+      }
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    res.status(201).json({ insertados });
+  } catch (e) { next(e); }
+});
+
+// ════════════════════════════════════════════════════════════
 //  RECURRENTES — gastos mensuales (FIJO/VARIABLE), última ocurrencia por serie
 // ════════════════════════════════════════════════════════════
 router.get("/recurrentes", authMiddleware, async (req, res, next) => {
@@ -280,6 +545,38 @@ router.get("/recurrentes", authMiddleware, async (req, res, next) => {
       ORDER BY g.serie_id, (g.periodo_anio * 12 + g.periodo_mes) DESC, g.id DESC
     `);
     res.json(rows);
+  } catch (e) { next(e); }
+});
+
+// ════════════════════════════════════════════════════════════
+//  RECURRENTES — generar manualmente la siguiente ocurrencia de una serie
+//  (mismo cálculo que el scheduler diario, pero disparado por el usuario;
+//  útil al cargar histórico y no querer esperar al cron de las 06:00).
+// ════════════════════════════════════════════════════════════
+router.post("/series/:serieId/siguiente", authMiddleware, editorMiddleware, async (req, res, next) => {
+  try {
+    const serieId = +req.params.serieId;
+    const ultimas = await q(`
+      SELECT DISTINCT ON (serie_id) *
+      FROM gastos
+      WHERE recurrente = TRUE AND serie_id = $1
+      ORDER BY serie_id, (periodo_anio * 12 + periodo_mes) DESC, id DESC
+    `, [serieId]);
+    const actual = ultimas[0];
+    if (!actual) return res.status(404).json({ error: "Serie recurrente no encontrada" });
+
+    const now = new Date();
+    const periodoActual = now.getFullYear() * 12 + (now.getMonth() + 1);
+    const { anio, mes } = siguientePeriodo(actual);
+    if ((anio * 12 + mes) > periodoActual) {
+      return res.status(400).json({
+        error: `Aún no corresponde generarla — la próxima es ${mes}/${anio}`,
+        proximo_mes: mes, proximo_anio: anio,
+      });
+    }
+
+    const nueva = await generarOcurrencia(q, actual);
+    res.status(201).json(nueva);
   } catch (e) { next(e); }
 });
 

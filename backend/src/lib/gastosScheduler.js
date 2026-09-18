@@ -7,6 +7,7 @@
 
 const cron = require("node-cron");
 const { Pool } = require("pg");
+const { generarOcurrencia } = require("./gastosRecurrentes");
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false });
 const TZ = process.env.TZ || "America/Bogota";
@@ -14,18 +15,6 @@ const TZ = process.env.TZ || "America/Bogota";
 async function q(text, params = []) {
   const { rows } = await pool.query(text, params);
   return rows;
-}
-
-// Suma N meses a una fecha (YYYY-MM-DD), ajustando al último día si el mes
-// destino es más corto (ej. 31 ene +1 → 28/29 feb).
-function sumarMeses(fechaStr, n) {
-  if (!fechaStr) return null;
-  const d = new Date(fechaStr);
-  const dia = d.getDate();
-  const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
-  const ultimoDia = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
-  target.setDate(Math.min(dia, ultimoDia));
-  return target.toISOString().slice(0, 10);
 }
 
 let _running = false;
@@ -60,35 +49,7 @@ async function tickGastosRecurrentes() {
           const nuevoMes  = (idx % 12) + 1;
           if ((nuevoAnio * 12 + nuevoMes) > (anioActual * 12 + mesActual)) break;
 
-          const nuevaFecha = sumarMeses(actual.fecha, intervalo);
-          const nuevoVenc  = actual.fecha_vencimiento ? sumarMeses(actual.fecha_vencimiento, intervalo) : null;
-          const esFijo = actual.recurrente_tipo === "FIJO";
-
-          const rows = await q(`
-            INSERT INTO gastos
-              (categoria, subcategoria, concepto, proveedor, monto, moneda,
-               monto_secundario, moneda_secundaria, fecha, fecha_vencimiento,
-               periodo_mes, periodo_anio, estado, persona_id, equipo_id, proyecto_id,
-               recurrente, recurrente_tipo, intervalo_meses, serie_id, por_completar,
-               archivo, notas, registrado_por_id)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
-            RETURNING *
-          `, [
-            actual.categoria, actual.subcategoria, actual.concepto, actual.proveedor,
-            esFijo ? actual.monto : 0,
-            actual.moneda,
-            esFijo ? actual.monto_secundario : null,
-            esFijo ? actual.moneda_secundaria : null,
-            nuevaFecha, nuevoVenc,
-            nuevoMes, nuevoAnio,
-            "PENDIENTE",
-            actual.persona_id, actual.equipo_id, actual.proyecto_id,
-            true, actual.recurrente_tipo, intervalo, actual.serie_id,
-            !esFijo,
-            "", actual.notas,
-            actual.registrado_por_id,
-          ]);
-          actual = rows[0];
+          actual = await generarOcurrencia(q, actual);
           console.log(`[gastos-scheduler] serie #${actual.serie_id} → nueva ocurrencia #${actual.id} (${nuevoMes}/${nuevoAnio}, ${actual.recurrente_tipo}, cada ${intervalo}m)`);
         }
       } catch (e) {

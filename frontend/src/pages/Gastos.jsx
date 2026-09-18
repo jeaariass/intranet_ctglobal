@@ -1,11 +1,12 @@
 // frontend/src/pages/Gastos.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
   Wallet, Plus, AlertTriangle, Eye, Download, X, Filter, TrendingDown, FileSpreadsheet,
+  FileUp, ChevronRight,
 } from "lucide-react";
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || "/api").replace(/\/api\/?$/, "");
@@ -131,6 +132,10 @@ export default function Gastos() {
   };
   const [range, setRange] = useState(mesRango(now.getMonth() + 1, now.getFullYear()));
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [descargandoPlantilla, setDescargandoPlantilla] = useState(false);
+  const [generandoSerie, setGenerandoSerie] = useState(null);
+  const importInputRef = useRef(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing]     = useState(null);
@@ -211,6 +216,54 @@ export default function Gastos() {
     } catch {
       alert("Error al generar el Excel");
     } finally { setExporting(false); }
+  };
+
+  const descargarPlantilla = async () => {
+    setDescargandoPlantilla(true);
+    try {
+      const res = await api.get("/gastos/import/plantilla.xlsx", { responseType:"blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "plantilla_gastos_historicos.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Error al generar la plantilla");
+    } finally { setDescargandoPlantilla(false); }
+  };
+
+  const importarArchivo = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("archivo", f);
+      const res = await api.post("/gastos/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      alert(`Importados ${res.data.insertados} gasto(s) correctamente.`);
+      refreshAll();
+    } catch (err) {
+      const data = err.response?.data;
+      if (data?.errores?.length) {
+        alert(`No se importó nada. Errores:\n\n${data.errores.join("\n")}`);
+      } else {
+        alert(data?.error || "Error al importar el archivo");
+      }
+    } finally { setImporting(false); }
+  };
+
+  const generarSiguiente = async (g) => {
+    setGenerandoSerie(g.serie_id);
+    try {
+      await api.post(`/gastos/series/${g.serie_id}/siguiente`);
+      await refreshAll();
+    } catch (err) {
+      alert(err.response?.data?.error || "Error al generar la siguiente ocurrencia");
+    } finally { setGenerandoSerie(null); }
   };
 
   const openNew = () => { setEditing(null); setForm(emptyForm); setFile(null); setError(""); setShowModal(true); };
@@ -339,6 +392,23 @@ export default function Gastos() {
           onClick={exportarExcel} style={{ display:"flex", alignItems:"center", gap:"0.35rem" }}>
           <FileSpreadsheet size={14} /> {exporting ? "Generando…" : "Descargar Excel"}
         </button>
+
+        {canEdit && (
+          <>
+            <span style={{ width:1, height:22, background:"var(--border)", margin:"0 0.25rem" }} />
+            <span style={{ fontSize:"0.8rem", color:"var(--text-muted)", fontWeight:600 }}>Histórico</span>
+            <button className="btn btn-outline btn-sm" disabled={descargandoPlantilla}
+              onClick={descargarPlantilla} style={{ display:"flex", alignItems:"center", gap:"0.35rem" }}>
+              <FileSpreadsheet size={14} /> {descargandoPlantilla ? "Generando…" : "Plantilla"}
+            </button>
+            <button className="btn btn-outline btn-sm" disabled={importing}
+              onClick={() => importInputRef.current?.click()}
+              style={{ display:"flex", alignItems:"center", gap:"0.35rem" }}>
+              <FileUp size={14} /> {importing ? "Importando…" : "Importar Excel"}
+            </button>
+            <input ref={importInputRef} type="file" accept=".xlsx" hidden onChange={importarArchivo} />
+          </>
+        )}
       </div>
 
       {/* Resumen del mes */}
@@ -561,11 +631,12 @@ export default function Gastos() {
                 <tr>
                   <th>Concepto</th><th>Tipo</th><th>Proveedor / Persona</th>
                   <th>Última ocurrencia</th><th>Valor</th><th>Estado</th>
+                  {canEdit && <th>Acciones</th>}
                 </tr>
               </thead>
               <tbody>
                 {recurrentes.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign:"center", color:"var(--text-muted)", padding:"1.5rem" }}>
+                  <tr><td colSpan={7} style={{ textAlign:"center", color:"var(--text-muted)", padding:"1.5rem" }}>
                     Ningún gasto recurrente configurado. Marca "Gasto recurrente" al crear un recibo público o de administración.
                   </td></tr>
                 ) : recurrentes.map(g => (
@@ -597,6 +668,22 @@ export default function Gastos() {
                           onClick={() => openEdit(g)}>⚠ Completar valor</button>
                       )}
                     </td>
+                    {canEdit && (() => {
+                      const idx = (g.periodo_anio * 12 + (g.periodo_mes - 1)) + Math.max(1, g.intervalo_meses || 1);
+                      const sigAnio = Math.floor(idx / 12), sigMes = (idx % 12) + 1;
+                      const debido = (sigAnio * 12 + sigMes) <= (now.getFullYear() * 12 + now.getMonth() + 1);
+                      return (
+                        <td>
+                          <button className="btn btn-ghost btn-sm" disabled={!debido || generandoSerie === g.serie_id}
+                            title={debido ? `Genera la ocurrencia de ${MESES[sigMes]} ${sigAnio}` : `Al día — la próxima es ${MESES[sigMes]} ${sigAnio}`}
+                            onClick={() => generarSiguiente(g)}
+                            style={{ display:"flex", alignItems:"center", gap:"0.25rem", whiteSpace:"nowrap" }}>
+                            <ChevronRight size={13} />
+                            {generandoSerie === g.serie_id ? "Generando…" : debido ? `Generar ${MESES[sigMes]}` : "Al día"}
+                          </button>
+                        </td>
+                      );
+                    })()}
                   </tr>
                 ))}
               </tbody>
