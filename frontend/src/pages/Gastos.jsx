@@ -1,5 +1,6 @@
 // frontend/src/pages/Gastos.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import api from "../services/api";
@@ -55,20 +56,20 @@ function FileViewer({ url, nombre, onClose }) {
 }
 
 // ── Constantes ──────────────────────────────────────────────
-const CATEGORIAS = ["RECIBO_PUBLICO","ADMINISTRACION","CONTRATISTA","VUELO","VIATICO","OTRO"];
-const RESUMEN_CATS = [...CATEGORIAS.slice(0,5), "DEPRECIACION", "OTRO"];
+const CATEGORIAS = ["RECIBO_PUBLICO","ADMINISTRACION","CONTRATISTA","VUELO","VIATICO","EQUIPO","OTRO"];
+const RESUMEN_CATS = ["RECIBO_PUBLICO","ADMINISTRACION","CONTRATISTA","VUELO","VIATICO","EQUIPO","DEPRECIACION","OTRO"];
 const CAT_LABEL = {
   RECIBO_PUBLICO:"Recibo público", ADMINISTRACION:"Administración",
   CONTRATISTA:"Pago contratista", VUELO:"Vuelo", VIATICO:"Viático",
-  DEPRECIACION:"Depreciación", OTRO:"Otro",
+  EQUIPO:"Equipo", DEPRECIACION:"Depreciación", OTRO:"Otro",
 };
 const CAT_ICON = {
   RECIBO_PUBLICO:"💡", ADMINISTRACION:"🏢", CONTRATISTA:"👷",
-  VUELO:"✈️", VIATICO:"🧳", DEPRECIACION:"📉", OTRO:"📌",
+  VUELO:"✈️", VIATICO:"🧳", EQUIPO:"💻", DEPRECIACION:"📉", OTRO:"📌",
 };
 const CAT_BADGE = {
   RECIBO_PUBLICO:"badge-blue", ADMINISTRACION:"badge-gray", CONTRATISTA:"badge-green",
-  VUELO:"badge-blue", VIATICO:"badge-yellow", DEPRECIACION:"badge-gray", OTRO:"badge-gray",
+  VUELO:"badge-blue", VIATICO:"badge-yellow", EQUIPO:"badge-blue", DEPRECIACION:"badge-gray", OTRO:"badge-gray",
 };
 const RECURRENTE_TIPOS = ["FIJO","VARIABLE"];
 const RECURRENTE_TIPO_LABEL = {
@@ -80,6 +81,7 @@ const INTERVALO_LABEL = { 1:"Cada mes", 2:"Cada 2 meses", 3:"Cada 3 meses", 4:"C
 const ESTADOS = ["PENDIENTE","PAGADO","ANULADO"];
 const ESTADO_BADGE = { PENDIENTE:"badge-yellow", PAGADO:"badge-green", ANULADO:"badge-gray" };
 const SUBCATS_RECIBO = ["Energía","Agua","Gas","Internet","Telefonía","Aseo","Vigilancia","Otro"];
+const SUBCATS_EQUIPO = ["Compra","Servicio mensual","Servicio anual","Mantenimiento","Otro"];
 const MESES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -105,6 +107,11 @@ const emptyForm = {
   estado:"PENDIENTE", persona_id:"", equipo_id:"", proyecto_id:"",
   recurrente:false, recurrente_tipo:"", intervalo_meses:"1", notas:"",
 };
+const emptyContratoForm = {
+  persona_id:"", valor_mensual:"", moneda:"COP",
+  fecha_inicio:"", fecha_fin:"", estado:"ACTIVO", referencia:"", notas:"",
+};
+const CONTRATO_ESTADO_BADGE = { ACTIVO:"badge-green", TERMINADO:"badge-gray" };
 
 export default function Gastos() {
   const { user } = useAuth();
@@ -116,13 +123,26 @@ export default function Gastos() {
   const [dep, setDep]         = useState(null);
   const [recurrentes, setRecurrentes] = useState([]);
   const [contratistas, setContratistas] = useState(null);
+  const [contratos, setContratos] = useState([]);
+  const [showContratoModal, setShowContratoModal] = useState(false);
+  const [editingContrato, setEditingContrato] = useState(null);
+  const [contratoForm, setContratoForm] = useState(emptyContratoForm);
+  const [savingContrato, setSavingContrato] = useState(false);
+  const [errorContrato, setErrorContrato] = useState("");
   const [alerts, setAlerts]   = useState([]);
   const [users, setUsers]     = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const equipoIdParam = searchParams.get("equipoId") || "";
+
   const [periodo, setPeriodo] = useState({ mes:String(now.getMonth() + 1), anio:String(now.getFullYear()) });
-  const [filter, setFilter]   = useState({ categoria:"", estado:"", personaId:"", proyectoId:"", q:"" });
+  const [filter, setFilter]   = useState({
+    categoria: equipoIdParam ? "EQUIPO" : "", estado:"", personaId:"", proyectoId:"", q:"",
+    equipoId: equipoIdParam,
+  });
+  const [equipmentList, setEquipmentList] = useState([]);
 
   const mesRango = (mes, anio) => {
     const desde = new Date(anio, mes - 1, 1);
@@ -149,12 +169,17 @@ export default function Gastos() {
 
   const loadListado = async () => {
     const p = new URLSearchParams();
-    if (periodo.mes)  p.set("mes",  periodo.mes);
-    if (periodo.anio) p.set("anio", periodo.anio);
+    // Con un equipo fijado (llegado desde Inventario) se muestra su historial
+    // completo, sin acotar al período contable seleccionado.
+    if (!filter.equipoId) {
+      if (periodo.mes)  p.set("mes",  periodo.mes);
+      if (periodo.anio) p.set("anio", periodo.anio);
+    }
     if (filter.categoria)  p.set("categoria",  filter.categoria);
     if (filter.estado)     p.set("estado",     filter.estado);
     if (filter.personaId)  p.set("personaId",  filter.personaId);
     if (filter.proyectoId) p.set("proyectoId", filter.proyectoId);
+    if (filter.equipoId)   p.set("equipoId",   filter.equipoId);
     if (filter.q)          p.set("q",          filter.q);
     const [g, r, al] = await Promise.all([
       api.get(`/gastos?${p}`),
@@ -181,19 +206,25 @@ export default function Gastos() {
     setContratistas(r.data);
   };
 
+  const loadContratos = async () => {
+    const r = await api.get("/contratos");
+    setContratos(r.data);
+  };
+
   useEffect(() => {
     Promise.all([
       api.get("/users").then(r => setUsers(r.data)),
       api.get("/geoprojects").then(r => setProjects(r.data)),
+      api.get("/equipment").then(r => setEquipmentList(r.data)),
     ]).catch(() => {});
   }, []);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadListado(), loadDep(), loadRecurrentes(), loadContratistas()]).finally(() => setLoading(false));
+    Promise.all([loadListado(), loadDep(), loadRecurrentes(), loadContratistas(), loadContratos()]).finally(() => setLoading(false));
     setRange(mesRango(+periodo.mes, +periodo.anio));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodo.mes, periodo.anio, filter.categoria, filter.estado, filter.personaId, filter.proyectoId, filter.q]);
+  }, [periodo.mes, periodo.anio, filter.categoria, filter.estado, filter.personaId, filter.proyectoId, filter.equipoId, filter.q]);
 
   const exportarExcel = async () => {
     if (!range.desde || !range.hasta) return;
@@ -266,7 +297,43 @@ export default function Gastos() {
     } finally { setGenerandoSerie(null); }
   };
 
-  const openNew = () => { setEditing(null); setForm(emptyForm); setFile(null); setError(""); setShowModal(true); };
+  const openNewContrato = () => {
+    setEditingContrato(null); setContratoForm(emptyContratoForm); setErrorContrato(""); setShowContratoModal(true);
+  };
+  const openEditContrato = (c) => {
+    setEditingContrato(c.id);
+    setErrorContrato("");
+    setContratoForm({
+      persona_id: String(c.persona_id), valor_mensual: c.valor_mensual, moneda: c.moneda,
+      fecha_inicio: c.fecha_inicio?.split("T")[0] || "",
+      fecha_fin: c.fecha_fin?.split("T")[0] || "",
+      estado: c.estado, referencia: c.referencia || "", notas: c.notas || "",
+    });
+    setShowContratoModal(true);
+  };
+  const submitContrato = async (e) => {
+    e.preventDefault();
+    setSavingContrato(true); setErrorContrato("");
+    try {
+      if (editingContrato) await api.put(`/contratos/${editingContrato}`, contratoForm);
+      else                  await api.post("/contratos", contratoForm);
+      setShowContratoModal(false);
+      loadContratos();
+    } catch (err) {
+      setErrorContrato(err.response?.data?.error || "Error al guardar el contrato");
+    } finally { setSavingContrato(false); }
+  };
+  const borrarContrato = async (id) => {
+    if (!confirm("¿Eliminar este contrato?")) return;
+    await api.delete(`/contratos/${id}`);
+    loadContratos();
+  };
+
+  const openNew = () => {
+    setEditing(null);
+    setForm(equipoIdParam ? { ...emptyForm, categoria:"EQUIPO", equipo_id:equipoIdParam } : emptyForm);
+    setFile(null); setError(""); setShowModal(true);
+  };
   const openEdit = (g) => {
     setEditing(g.id);
     setError("");
@@ -292,7 +359,7 @@ export default function Gastos() {
     setShowModal(true);
   };
 
-  const refreshAll = () => Promise.all([loadListado(), loadRecurrentes(), loadContratistas()]);
+  const refreshAll = () => Promise.all([loadListado(), loadRecurrentes(), loadContratistas(), loadContratos()]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -328,9 +395,10 @@ export default function Gastos() {
   const showPersona   = ["CONTRATISTA","VUELO","VIATICO"].includes(cat);
   const personaReq    = cat === "CONTRATISTA";
   const showProyecto  = ["CONTRATISTA","VUELO","VIATICO","OTRO"].includes(cat);
-  const showProveedor = ["RECIBO_PUBLICO","ADMINISTRACION","VUELO","OTRO"].includes(cat);
-  const showVenc      = ["RECIBO_PUBLICO","ADMINISTRACION","OTRO"].includes(cat);
-  const showRecurrente = ["RECIBO_PUBLICO","ADMINISTRACION"].includes(cat);
+  const showProveedor = ["RECIBO_PUBLICO","ADMINISTRACION","VUELO","EQUIPO","OTRO"].includes(cat);
+  const showVenc      = ["RECIBO_PUBLICO","ADMINISTRACION","EQUIPO","OTRO"].includes(cat);
+  const showRecurrente = ["RECIBO_PUBLICO","ADMINISTRACION","EQUIPO"].includes(cat);
+  const showEquipo    = cat === "EQUIPO";
 
   const maxHist = useMemo(
     () => Math.max(1, ...(resumen?.historico || []).map(h => h.total_cop)),
@@ -350,6 +418,20 @@ export default function Gastos() {
           </button>
         )}
       </div>
+
+      {/* Banner si viene de un equipo específico (Inventario → Ver en Gastos) */}
+      {filter.equipoId && (
+        <div style={{ background:"var(--primary-50)", border:"1px solid var(--primary-100)",
+          borderRadius:"var(--radius-sm)", padding:"0.65rem 1rem", marginBottom:"1rem",
+          fontSize:"0.82rem", color:"var(--primary)", display:"flex",
+          justifyContent:"space-between", alignItems:"center" }}>
+          <span>Mostrando el historial de gastos de este equipo (todos los períodos)</span>
+          <button className="btn btn-ghost btn-sm"
+            onClick={() => { setFilter({ ...filter, equipoId:"", categoria:"" }); setSearchParams({}); }}>
+            Ver todos los gastos
+          </button>
+        </div>
+      )}
 
       {/* Alertas por vencer */}
       {alerts.length > 0 && (
@@ -481,7 +563,7 @@ export default function Gastos() {
 
       {/* Tabs */}
       <div style={{ display:"flex", gap:"0.25rem", borderBottom:"1px solid var(--border)", marginBottom:"1rem" }}>
-        {[["gastos","Gastos"],["mensuales","Gastos mensuales"],["contratistas","Contratistas"],["depreciacion","Depreciación"]].map(([k, lbl]) => (
+        {[["gastos","Gastos"],["mensuales","Gastos mensuales"],["contratistas","Contratistas"],["contratos","Contratos"],["depreciacion","Depreciación"]].map(([k, lbl]) => (
           <button key={k} onClick={() => setTab(k)}
             className="btn btn-ghost btn-sm"
             style={{ borderRadius:0, borderBottom: tab === k ? "2px solid var(--primary)" : "2px solid transparent",
@@ -748,6 +830,62 @@ export default function Gastos() {
             </table>
           </div>
         </div>
+      ) : tab === "contratos" ? (
+        /* ── Tab Contratos (valor mensual + vigencia, alimenta previsión de Finanzas) ── */
+        <div className="card">
+          <div style={{ padding:"0.85rem 1rem", borderBottom:"1px solid var(--border)",
+            display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"0.5rem" }}>
+            <span style={{ fontSize:"0.78rem", color:"var(--text-muted)" }}>
+              Contratos activos = lo que el Dashboard de Finanzas usa para proyectar cuánto falta comprometer hasta fin de año.
+            </span>
+            {canEdit && (
+              <button className="btn btn-primary btn-sm" onClick={openNewContrato}>
+                <Plus size={14} /> Nuevo contrato
+              </button>
+            )}
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Contratista</th><th>Valor mensual</th><th>Vigencia</th>
+                  <th>Estado</th><th>Referencia</th>
+                  {canEdit && <th>Acciones</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {contratos.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign:"center", color:"var(--text-muted)", padding:"1.5rem" }}>
+                    Ningún contrato registrado. Crea uno para que Finanzas proyecte el compromiso pendiente.
+                  </td></tr>
+                ) : contratos.map(c => (
+                  <tr key={c.id}>
+                    <td>
+                      <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{c.persona_nombre}</div>
+                      <div style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>{c.persona_cedula || "—"}</div>
+                    </td>
+                    <td style={{ fontWeight:700, fontSize:"0.86rem" }}>{fmt(c.valor_mensual, c.moneda)}</td>
+                    <td style={{ fontSize:"0.8rem", color:"var(--text-muted)" }}>
+                      {format(new Date(c.fecha_inicio), "d MMM yyyy", { locale:es })}
+                      {" → "}
+                      {c.fecha_fin ? format(new Date(c.fecha_fin), "d MMM yyyy", { locale:es }) : "Indefinido"}
+                    </td>
+                    <td><span className={`badge ${CONTRATO_ESTADO_BADGE[c.estado]}`}>{c.estado}</span></td>
+                    <td style={{ fontSize:"0.82rem" }}>{c.referencia || "—"}</td>
+                    {canEdit && (
+                      <td>
+                        <div style={{ display:"flex", gap:"0.35rem", flexWrap:"wrap" }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => openEditContrato(c)}>Editar</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => borrarContrato(c.id)}>✕</button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         /* ── Tab Depreciación ── */
         <div className="card">
@@ -832,6 +970,16 @@ export default function Gastos() {
                       </select>
                     </div>
                   )}
+                  {cat === "EQUIPO" && (
+                    <div className="form-group">
+                      <label className="form-label">Tipo de factura *</label>
+                      <select value={form.subcategoria} required
+                        onChange={e => setForm({ ...form, subcategoria:e.target.value })}>
+                        <option value="">— Seleccionar —</option>
+                        {SUBCATS_EQUIPO.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -872,6 +1020,16 @@ export default function Gastos() {
                         onChange={e => setForm({ ...form, proyecto_id:e.target.value })}>
                         <option value="">Sin proyecto</option>
                         {projects.map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {showEquipo && (
+                    <div className="form-group">
+                      <label className="form-label">Equipo (opcional)</label>
+                      <select value={form.equipo_id}
+                        onChange={e => setForm({ ...form, equipo_id:e.target.value })}>
+                        <option value="">Sin equipo (servicio independiente)</option>
+                        {equipmentList.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
                       </select>
                     </div>
                   )}
@@ -999,6 +1157,93 @@ export default function Gastos() {
                 <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? "Guardando…" : editing ? "Guardar cambios" : "Registrar gasto"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showContratoModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowContratoModal(false)}>
+          <div className="modal" style={{ maxWidth:520 }}>
+            <div className="modal-header">
+              <h3 style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
+                📄 {editingContrato ? "Editar contrato" : "Nuevo contrato"}
+              </h3>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowContratoModal(false)}>✕</button>
+            </div>
+            <form onSubmit={submitContrato}>
+              <div className="modal-body">
+                {errorContrato && <div className="alert alert-error">{errorContrato}</div>}
+
+                <div className="form-group">
+                  <label className="form-label">Contratista *</label>
+                  <select value={contratoForm.persona_id} required
+                    onChange={e => setContratoForm({ ...contratoForm, persona_id:e.target.value })}>
+                    <option value="">— Seleccionar —</option>
+                    {users.filter(u => u.rol === "CONTRATISTA").map(u =>
+                      <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>)}
+                  </select>
+                </div>
+
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Valor mensual *</label>
+                    <input type="number" step="0.01" min="0" required
+                      value={contratoForm.valor_mensual}
+                      onChange={e => setContratoForm({ ...contratoForm, valor_mensual:e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Moneda</label>
+                    <select value={contratoForm.moneda}
+                      onChange={e => setContratoForm({ ...contratoForm, moneda:e.target.value })}>
+                      {["COP","USD","EUR"].map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Fecha inicio *</label>
+                    <input type="date" required value={contratoForm.fecha_inicio}
+                      onChange={e => setContratoForm({ ...contratoForm, fecha_inicio:e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Fecha fin</label>
+                    <input type="date" value={contratoForm.fecha_fin}
+                      onChange={e => setContratoForm({ ...contratoForm, fecha_fin:e.target.value })} />
+                    <span style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>Vacío = indefinido</span>
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Estado</label>
+                    <select value={contratoForm.estado}
+                      onChange={e => setContratoForm({ ...contratoForm, estado:e.target.value })}>
+                      <option value="ACTIVO">Activo</option>
+                      <option value="TERMINADO">Terminado</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Referencia</label>
+                    <input value={contratoForm.referencia}
+                      onChange={e => setContratoForm({ ...contratoForm, referencia:e.target.value })}
+                      placeholder="Nº de contrato (opcional)" />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Notas</label>
+                  <textarea rows={2} value={contratoForm.notas}
+                    onChange={e => setContratoForm({ ...contratoForm, notas:e.target.value })} />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowContratoModal(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={savingContrato}>
+                  {savingContrato ? "Guardando…" : editingContrato ? "Guardar cambios" : "Crear contrato"}
                 </button>
               </div>
             </form>

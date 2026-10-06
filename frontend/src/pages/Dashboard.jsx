@@ -9,7 +9,7 @@ import {
   Users, Map, FileText, Monitor, Radio,
   AlertTriangle, ChevronRight, ArrowUpRight,
   Megaphone, CalendarDays, FolderOpen, BookOpen,
-  Receipt, Clock
+  Wallet, Clock
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -21,7 +21,7 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       api.get("/reports/dashboard"),
-      api.get("/invoices/alerts"),
+      api.get("/gastos/alerts"),
     ]).then(([d, inv]) => {
       setData(d.data);
       setInvoiceAlerts(inv.data);
@@ -130,7 +130,7 @@ export default function Dashboard() {
             ) : (
               <table>
                 <tbody>
-                  {/* Facturas por vencer */}
+                  {/* Gastos por vencer */}
                   {invoiceAlerts.map(inv => (
                     <tr key={`inv-${inv.id}`}>
                       <td>
@@ -139,7 +139,7 @@ export default function Dashboard() {
                             background:"var(--accent)",flexShrink:0 }} />
                           <div>
                             <div style={{ fontWeight:600, fontSize:"0.825rem" }}>
-                              Factura por vencer
+                              Gasto por vencer
                             </div>
                             <div style={{ fontSize:"0.75rem", color:"var(--text-muted)" }}>
                               {inv.concepto}
@@ -148,7 +148,7 @@ export default function Dashboard() {
                         </div>
                       </td>
                       <td style={{ textAlign:"right" }}>
-                        <Link to="/facturas">
+                        <Link to="/gastos">
                           <span className="badge badge-yellow">
                             <Clock size={10} style={{ marginRight:3 }} />
                             {format(new Date(inv.fecha_vencimiento), "d MMM", { locale:es })}
@@ -283,7 +283,7 @@ export default function Dashboard() {
                 { to:"/wiki",        icon:BookOpen,     label:"Wiki",         bg:"#f3e8ff", color:"#7e22ce" },
                 { to:"/geovisores",  icon:Map,          label:"Geovisores",   bg:"#e0f2fe", color:"#0369a1" },
                 { to:"/equipos",     icon:Monitor,      label:"Inventario",   bg:"#f1f5f9", color:"#475569" },
-                { to:"/facturas",    icon:Receipt,      label:"Facturación",  bg:"#fff7ed", color:"#c2410c" },
+                { to:"/gastos",      icon:Wallet,       label:"Gastos",       bg:"#fff7ed", color:"#c2410c" },
               ].map(({ to, icon:Icon, label, bg, color }) => (
                 <Link key={to} to={to} style={{
                   display:"flex", flexDirection:"column", alignItems:"flex-start",

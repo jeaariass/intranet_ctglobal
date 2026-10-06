@@ -259,10 +259,10 @@ router.get("/export.xlsx", authMiddleware, async (req, res, next) => {
     );
 
     const { rows: invRows } = await pool.query(`
-      SELECT equipo_id, concepto, archivo_pdf, estado
-      FROM invoices
-      WHERE equipo_id IS NOT NULL
-      ORDER BY fecha_emision DESC
+      SELECT equipo_id, concepto, archivo, estado
+      FROM gastos
+      WHERE equipo_id IS NOT NULL AND categoria = 'EQUIPO'
+      ORDER BY fecha DESC
     `);
     const invByEquipo = {};
     for (const r of invRows) (invByEquipo[r.equipo_id] ||= []).push(r);
@@ -289,7 +289,7 @@ router.get("/export.xlsx", authMiddleware, async (req, res, next) => {
       { header: "Foto 2",                key: "foto2",         width: 18 },
       { header: "Foto 3",                key: "foto3",         width: 18 },
       { header: "Factura de compra",     key: "factura",       width: 20 },
-      { header: "Facturas (Facturación)", key: "invoices",     width: 40 },
+      { header: "Facturas de equipo",     key: "invoices",     width: 40 },
       { header: "Próx. mantenimiento",   key: "proxMant",      width: 18 },
     ];
     ws.getRow(1).font = { bold: true };
@@ -348,14 +348,14 @@ router.get("/export.xlsx", authMiddleware, async (req, res, next) => {
         row.getCell(16).value = "—";
       }
 
-      // Facturas del módulo de Facturación
+      // Facturas de equipo (Gastos, categoría "Equipo")
       const invs = invByEquipo[it.id] || [];
       if (invs.length) {
-        const withPdf = invs.find((x) => x.archivo_pdf);
+        const withPdf = invs.find((x) => x.archivo);
         row.getCell(17).value = withPdf
           ? {
               text: invs.map((x) => `• ${x.concepto} (${x.estado})`).join("\n"),
-              hyperlink: `${base}/uploads/invoices/${withPdf.archivo_pdf}`,
+              hyperlink: `${base}/uploads/gastos/${withPdf.archivo}`,
             }
           : invs.map((x) => `• ${x.concepto} (${x.estado})`).join("\n");
       } else {
@@ -454,20 +454,6 @@ router.get("/:id", authMiddleware, async (req, res, next) => {
         usuario:  u ? { nombre: u.nombre, apellido: u.apellido } : null,
       })),
     });
-  } catch (e) { next(e); }
-});
-
-// GET /api/equipment/:id/invoices — facturas vinculadas al equipo
-router.get("/:id/invoices", authMiddleware, async (req, res, next) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT i.*, u.nombre || ' ' || u.apellido AS registrado_por_nombre
-      FROM invoices i
-      LEFT JOIN users u ON u.id = i.registrado_por_id
-      WHERE i.equipo_id = $1
-      ORDER BY i.fecha_emision DESC
-    `, [+req.params.id]);
-    res.json(rows);
   } catch (e) { next(e); }
 });
 

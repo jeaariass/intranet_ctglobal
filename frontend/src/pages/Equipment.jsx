@@ -260,15 +260,15 @@ const EQ_MODAL_CSS = `
 .eq-slot-tag--ok { background:#16a34a; }
 `;
 
-// ── Modal facturas del módulo de Facturación ─────────────────
+// ── Modal facturas/gastos del equipo (categoría "Equipo" en Gastos) ──
 function InvoiceModal({ equipo, onClose }) {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [viewer, setViewer]     = useState(null);
-  const invBase = `${API_ORIGIN}/uploads/invoices`;
+  const invBase = `${API_ORIGIN}/uploads/gastos`;
 
   useEffect(() => {
-    api.get(`/equipment/${equipo.id}/invoices`)
+    api.get(`/gastos?equipoId=${equipo.id}&categoria=EQUIPO`)
       .then(r => setInvoices(r.data))
       .finally(() => setLoading(false));
   }, [equipo.id]);
@@ -289,9 +289,9 @@ function InvoiceModal({ equipo, onClose }) {
             <Receipt size={16} /> Facturas — {equipo.nombre}
           </h3>
           <div style={{ display:"flex", alignItems:"center", gap:"0.75rem" }}>
-            <Link to={`/facturas?equipoId=${equipo.id}`} className="btn btn-outline btn-sm"
+            <Link to={`/gastos?equipoId=${equipo.id}`} className="btn btn-outline btn-sm"
               style={{ display:"flex", alignItems:"center", gap:"0.3rem" }} onClick={onClose}>
-              <ExternalLink size={13} /> Ver en Facturación
+              <ExternalLink size={13} /> Ver en Gastos
             </Link>
             <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
           </div>
@@ -303,7 +303,7 @@ function InvoiceModal({ equipo, onClose }) {
             <div className="empty-state" style={{ padding:"2rem" }}>
               <div className="empty-state-icon"><Receipt size={32} strokeWidth={1} color="#e2e8f0" /></div>
               <h3>Sin facturas</h3>
-              <p>Registra facturas desde el módulo de Facturación.</p>
+              <p>Registra facturas desde Gastos (categoría "Equipo").</p>
             </div>
           ) : (
             <table>
@@ -320,21 +320,20 @@ function InvoiceModal({ equipo, onClose }) {
                     <td style={{ fontSize:"0.78rem", color:"var(--text-muted)" }}>
                       {inv.periodo_mes && inv.periodo_anio
                         ? `${MESES[inv.periodo_mes]} ${inv.periodo_anio}`
-                        : format(new Date(inv.fecha_emision), "d MMM yyyy", { locale:es })}
+                        : format(new Date(inv.fecha), "d MMM yyyy", { locale:es })}
                     </td>
                     <td style={{ fontWeight:700, fontSize:"0.85rem" }}>{fmt(inv.monto, inv.moneda)}</td>
                     <td>
                       <span className={`badge ${
                         inv.estado==="PAGADO" ? "badge-green" :
-                        inv.estado==="VENCIDO" ? "badge-red" :
-                        inv.estado==="CANCELADO" ? "badge-gray" : "badge-yellow"
+                        inv.estado==="ANULADO" ? "badge-gray" : "badge-yellow"
                       }`}>{inv.estado}</span>
                     </td>
                     <td>
-                      {inv.archivo_pdf ? (
+                      {inv.archivo ? (
                         <button className="btn btn-ghost btn-sm"
                           style={{ display:"inline-flex", alignItems:"center", gap:"0.3rem" }}
-                          onClick={() => setViewer({ url:`${invBase}/${inv.archivo_pdf}`, nombre:inv.concepto })}>
+                          onClick={() => setViewer({ url:`${invBase}/${inv.archivo}`, nombre:inv.concepto })}>
                           <Eye size={13} /> Ver
                         </button>
                       ) : <span style={{ color:"var(--text-light)", fontSize:"0.75rem" }}>—</span>}

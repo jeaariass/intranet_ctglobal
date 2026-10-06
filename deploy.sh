@@ -118,6 +118,13 @@ else
   echo "⏭️  [4/6] Sin migraciones nuevas (saltando)"
 fi
 
+# Traspaso histórico Facturación → Gastos (idempotente, se autodesactiva
+# solo cuando la tabla 'invoices' ya no existe — seguro dejarlo permanente).
+if ! $NO_MIGRATIONS; then
+  echo "🧾 Sincronizando histórico de Facturación → Gastos…"
+  node scripts/merge-facturacion.js
+fi
+
 # ── 5. Frontend build ────────────────────────────────────────
 if $SKIP_FRONTEND; then
   echo "⏭️  [5/6] Frontend saltado (--skip-frontend)"

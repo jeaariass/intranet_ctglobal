@@ -6,7 +6,7 @@ import { es } from "date-fns/locale";
 import {
   Home, Megaphone, FolderOpen, Users, CalendarDays,
   BookOpen, Monitor, Map, BarChart2, Settings,
-  LogOut, Menu, ChevronRight, Globe, Receipt, Bell, Wallet, LayoutDashboard
+  LogOut, Menu, ChevronRight, Globe, Bell, Wallet, LayoutDashboard
 } from "lucide-react";
 
 // Acceso a Facturación: rol principal o adicional (ej. un contratista con
@@ -43,7 +43,6 @@ const NAV_GROUPS = [
     label: "Finanzas",
     items: [
       { to: "/finanzas",    icon: LayoutDashboard, label: "Dashboard",    roles: ROLES_FINANZAS },
-      { to: "/facturas",    icon: Receipt,       label: "Facturación", roles: ROLES_FINANZAS },
       { to: "/gastos",      icon: Wallet,        label: "Gastos" },
     ],
   },
@@ -60,7 +59,6 @@ const PAGE_TITLES = {
   "/geovisores":     "Proyectos GIS",
   "/reportes":       "Reportes",
   "/finanzas":       "Dashboard de Finanzas",
-  "/facturas":       "Facturación",
   "/gastos":         "Gastos",
   "/recordatorios":  "Recordatorios",
   "/perfil":         "Mi Perfil",

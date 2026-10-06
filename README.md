@@ -24,7 +24,7 @@ intranet_ctglobal/
 │   ├── src/
 │   │   ├── routes/       # auth, users, announcements, documents, events,
 │   │   │                 # wiki, equipment, geoprojects, geoauth, sessions,
-│   │   │                 # invoices, reports, reminders
+│   │   │                 # gastos, finanzas, contratos, reports, reminders
 │   │   ├── lib/          # prisma.js, whatsappClient.js, reminderScheduler.js
 │   │   └── middleware/   # JWT auth
 │   ├── prisma/
@@ -399,7 +399,7 @@ git remote set-url origin git@github.com-tramites:jeaariass/t_intranet.git
 | 🖥️ Inventario | Equipos físicos + licencias + bitácora de movimientos + facturas vinculadas |
 | 🗺️ Geovisores | Gestión de proyectos GIS, accesos por cliente, API keys, integración SDK |
 | 📊 Reportes | Vista ejecutiva: sesiones activas, top capas, uso de equipos |
-| 💰 Facturación | Control de facturas, dual-currency (COP+USD), alertas de vencimiento |
+| 💰 Gastos | Recibos, contratistas, viáticos, facturas de equipo, recurrentes, dual-currency (COP+USD), alertas de vencimiento |
 | 🔔 Recordatorios | Mensajes WhatsApp programados (única / diaria / semanal / mensual / cada N días) |
 | 👥 Directorio | Tarjetas de empleados con búsqueda |
 | 📅 Calendario | Vista mensual con eventos corporativos |

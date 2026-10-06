@@ -1,5 +1,5 @@
 // backend/src/routes/gastos.js
-// Gastos operativos. Usa pg directo (igual que invoices.js) por los enums nuevos.
+// Gastos operativos. Usa pg directo por los enums nuevos (categoría/estado).
 
 const router   = require("express").Router();
 const multer   = require("multer");
@@ -159,7 +159,7 @@ router.get("/alerts", authMiddleware, async (req, res, next) => {
 const CAT_LABEL = {
   RECIBO_PUBLICO: "Recibo público", ADMINISTRACION: "Administración",
   CONTRATISTA: "Pago contratista", VUELO: "Vuelo", VIATICO: "Viático",
-  DEPRECIACION: "Depreciación", OTRO: "Otro",
+  EQUIPO: "Equipo", DEPRECIACION: "Depreciación", OTRO: "Otro",
 };
 
 router.get("/export.xlsx", authMiddleware, async (req, res, next) => {
@@ -276,7 +276,7 @@ router.get("/export.xlsx", authMiddleware, async (req, res, next) => {
 // ════════════════════════════════════════════════════════════
 //  IMPORTAR HISTÓRICO — plantilla Excel normalizada + carga masiva
 // ════════════════════════════════════════════════════════════
-const IMPORT_CATEGORIAS = ["RECIBO_PUBLICO", "ADMINISTRACION", "CONTRATISTA", "VUELO", "VIATICO", "OTRO"];
+const IMPORT_CATEGORIAS = ["RECIBO_PUBLICO", "ADMINISTRACION", "CONTRATISTA", "VUELO", "VIATICO", "EQUIPO", "OTRO"];
 const CATEGORIA_LABEL_TO_CODE = Object.fromEntries(IMPORT_CATEGORIAS.map(c => [CAT_LABEL[c], c]));
 const ESTADO_LABEL = { PENDIENTE: "Pendiente", PAGADO: "Pagado", ANULADO: "Anulado" };
 const ESTADO_LABEL_TO_CODE = Object.fromEntries(Object.entries(ESTADO_LABEL).map(([k, v]) => [v, k]));

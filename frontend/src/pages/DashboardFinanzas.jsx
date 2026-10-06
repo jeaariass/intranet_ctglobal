@@ -2,16 +2,13 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { LayoutDashboard, TrendingUp, TrendingDown, Save, Wallet, Receipt } from "lucide-react";
+import { LayoutDashboard, TrendingUp, TrendingDown, Save, Wallet } from "lucide-react";
 
 const CAT_LABEL = {
   RECIBO_PUBLICO:"Recibo público", ADMINISTRACION:"Administración",
   CONTRATISTA:"Pago contratista", VUELO:"Vuelo", VIATICO:"Viático",
-  DEPRECIACION:"Depreciación", OTRO:"Otro",
-};
-const TIPO_LABEL = {
-  COMPRA:"Compra", SERVICIO_MENSUAL:"Servicio mensual",
-  SERVICIO_ANUAL:"Servicio anual", MANTENIMIENTO:"Mantenimiento", OTRO:"Otro",
+  EQUIPO:"Equipo", DEPRECIACION:"Depreciación", OTRO:"Otro",
+  CONTRATOS_ACTIVOS:"📄 Comprometido por contratos activos",
 };
 const MESES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -153,35 +150,6 @@ export default function DashboardFinanzas() {
             </div>
           </div>
 
-          {/* ── Facturación por tipo ── */}
-          <div className="card" style={{ marginBottom:"1.5rem" }}>
-            <div style={{ padding:"0.85rem 1rem", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:"0.5rem", fontWeight:700, fontSize:"0.9rem" }}>
-              <Receipt size={16} /> Facturación por tipo — {anio}
-            </div>
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr><th>Tipo</th><th>Estado</th><th>Registros</th><th>Total COP</th><th>Total USD</th></tr>
-                </thead>
-                <tbody>
-                  {(resumen?.facturasPorTipo || []).length === 0 ? (
-                    <tr><td colSpan={5} style={{ textAlign:"center", color:"var(--text-muted)", padding:"1.25rem" }}>Sin facturas registradas en {anio}.</td></tr>
-                  ) : resumen.facturasPorTipo.map((f, i) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight:600, fontSize:"0.85rem" }}>{TIPO_LABEL[f.tipo] || f.tipo}</td>
-                      <td><span className="badge badge-gray">{f.estado}</span></td>
-                      <td style={{ fontSize:"0.82rem" }}>{f.count}</td>
-                      <td style={{ fontWeight:700, fontSize:"0.86rem" }}>{cop0(f.total_cop)}</td>
-                      <td style={{ fontSize:"0.82rem", color: f.total_usd > 0 ? "#1d4ed8" : "var(--text-light)" }}>
-                        {f.total_usd > 0 ? usd2(f.total_usd) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           {/* ── Previsión anual ── */}
           <div className="card">
             <div style={{ padding:"0.85rem 1rem", borderBottom:"1px solid var(--border)" }}>
@@ -212,10 +180,15 @@ export default function DashboardFinanzas() {
                       <td>
                         <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{CAT_LABEL[l.categoria] || l.categoria}</div>
                         {l.subcategoria && <div style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>{l.subcategoria}</div>}
+                        {l.categoria === "CONTRATOS_ACTIVOS" && l.notas && (
+                          <div style={{ fontSize:"0.72rem", color:"var(--text-muted)" }}>{l.notas}</div>
+                        )}
                       </td>
                       <td style={{ fontSize:"0.8rem", color:"var(--text-muted)" }}>{cop0(l.promedio_auto)}</td>
                       <td style={{ width:140 }}>
-                        {canEditPrevision ? (
+                        {l.categoria === "CONTRATOS_ACTIVOS" ? (
+                          <span style={{ fontWeight:600, fontSize:"0.84rem" }}>{cop0(l.promedio_efectivo)}</span>
+                        ) : canEditPrevision ? (
                           <input type="number" step="0.01" min="0" style={{ width:130 }}
                             placeholder={cop0(l.promedio_auto)}
                             value={editValue(l)}
@@ -228,7 +201,7 @@ export default function DashboardFinanzas() {
                       <td style={{ fontSize:"0.83rem" }}>{cop0(l.proyeccion_resto)}</td>
                       <td style={{ fontWeight:700, fontSize:"0.86rem" }}>{cop0(l.total_estimado)}</td>
                       <td>
-                        {canEditPrevision && dirty(l) && (
+                        {l.categoria !== "CONTRATOS_ACTIVOS" && canEditPrevision && dirty(l) && (
                           <button className="btn btn-sm btn-primary" disabled={saving[key(l)]}
                             onClick={() => guardarLinea(l)}
                             style={{ display:"flex", alignItems:"center", gap:"0.3rem" }}>
